@@ -1,0 +1,4 @@
+ircdd
+=====
+
+IRC Distributed Daemon
