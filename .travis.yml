@@ -4,8 +4,9 @@ python:
 
 # install dependencies
 install:
-    - pip install -r requirements.txt
+    - pip install flake8
 
 # run the tests
 script: 
+    - flake8 .
     - nosetests
