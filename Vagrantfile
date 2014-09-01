@@ -13,7 +13,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box = "hashicorp/precise64"
 
   # Install software and dependencies (Travis uses the same script!)
-  config.vm.provision :shell, path: "provision.sh"
+  config.vm.provision :shell, path: "scripts/provision.sh"
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs

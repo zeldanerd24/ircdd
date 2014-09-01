@@ -8,5 +8,4 @@ install:
 
 # run the tests
 script: 
-    - flake8 .
-    - nosetests
+    - ./scripts/test.sh
