@@ -1,4 +1,6 @@
 #!/bin/bash
 
-flake8 ./
-nosetests ./
+PKG=ircdd
+
+flake8 $PKG
+nosetests $PKG
