@@ -1,0 +1,17 @@
+[Unit]
+Description=NSQDaemon
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=60
+ExecStartPre=-/usr/bin/docker kill nsqd-%i
+ExecStartPre=-/usr/bin/docker rm nsqd-%i
+ExecStartPre=/usr/bin/docker pull dockerfile/nsq
+
+ExecStart=/usr/bin/docker run --name nsqd-%i dockerfile/nsq nsqd
+
+ExecStop=/usr/bin/docker stop nsqd-%i
+
+[X-Fleet]
+Global=true

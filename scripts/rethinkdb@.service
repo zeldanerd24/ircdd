@@ -1,0 +1,15 @@
+[Unit]
+Description=RethinkDB
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+ExecStartPre=-/usr/bin/docker kill rethinkdb-%i
+ExecStartPre=-/usr/bin/docker rm rethinkdb-%i
+ExecStartPre=/usr/bin/docker pull dockerfile/rethinkdb
+ExecStart=/usr/bin/docker run -name rethinkdb-%i -p 8080:8080 -p 28015:28015 dockerfile/rethinkdb
+ExecStop=/usr/bin/docker stop rethinkdb-%i
+
+[X-Fleet]
+Conflicts=rethinkdb@*.service

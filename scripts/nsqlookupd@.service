@@ -1,0 +1,15 @@
+[Unit]
+Description=NSQLookupDaemon
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=60
+ExecStartPre=-/usr/bin/docker kill nsqlookupd-%i
+ExecStartPre=-/usr/bin/docker rm nsqlookupd-%i
+ExecStartPre=/usr/bin/docker pull dockerfile/nsq
+ExecStart=/usr/bin/docker run --name nsqlookupd-%i dockerfile/nsq nsqlookupd
+ExecStop=/usr/bin/docker stop nsqlookupd-%i
+
+[X-Fleet]
+Conflicts=nsqlookupd@*.service
