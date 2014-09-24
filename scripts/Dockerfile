@@ -8,4 +8,4 @@ VOLUME ["/data"]
 
 WORKDIR /data
 
-CMD ["/usr/bin/ircdd",]
+CMD ["/usr/bin/bash",]

@@ -96,7 +96,7 @@ Vagrant.configure("2") do |config|
         config.vm.provision :shell, :inline => "mv /tmp/vagrantfile-user-data /var/lib/coreos-vagrant/", :privileged => true
       end
 
-      config.vm.synced_folder ".", "/home/core/ircdd-share"
+      config.vm.synced_folder ".", "/home/core/ircdd"
 
     end
   end
