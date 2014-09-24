@@ -1,0 +1,17 @@
+[Unit]
+Description=IRCDistributedDaemon
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=60
+ExecStartPre=-/usr/bin/docker kill ircdd-%i
+ExecStartPre=-/usr/bin/docker rm ircdd-%i
+ExecStartPre=/usr/bin/docker build -t ircdd ~/ircdd/scripts/Dockerfile
+
+ExecStart=/usr/bin/docker run --name ircdd-%i ircdd ircdd
+
+ExecStop=/usr/bin/docker stop ircdd-%i
+
+[X-Fleet]
+Global=true
