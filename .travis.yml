@@ -4,8 +4,9 @@ python:
 
 # install dependencies
 install:
-    - ./scripts/provision.sh
+    - sudo python setup.py install
 
 # run the tests
 script: 
-    - ./scripts/test.sh
+    - python setup.py flake8
+    - python setup.py nosetests
