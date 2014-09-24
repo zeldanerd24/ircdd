@@ -8,5 +8,5 @@ install:
 
 # run the tests
 script: 
-    - python setup.py flake8
-    - python setup.py nosetests
+    - sudo python setup.py flake8
+    - sudo python setup.py nosetests

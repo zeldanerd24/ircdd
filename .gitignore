@@ -54,3 +54,6 @@ docs/_build/
 
 # Vagrant stuff
 .vagrant
+
+# Temporary packages
+*.zip
