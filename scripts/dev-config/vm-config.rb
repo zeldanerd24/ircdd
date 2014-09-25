@@ -31,7 +31,7 @@ end
 $num_instances=1
 
 # Official CoreOS channel from which updates should be downloaded
-$update_channel='stable'
+$update_channel='alpha'
 
 # Log the serial consoles of CoreOS VMs to log/
 # Enable by setting value to true, disable with false
@@ -50,3 +50,5 @@ $enable_serial_logging=false
 $vb_gui = false
 $vb_memory = 1024
 $vb_cpus = 1
+
+$synced_folder = "../../"

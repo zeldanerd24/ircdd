@@ -1,12 +1,17 @@
 #! /usr/bin/env python2.7
-from distutils.core import setup
+import ez_setup
+ez_setup.use_setuptools()
+
+from setuptools import setup, find_packages
 
 setup(name="ircdd",
-      version="pre-dev",
+      version="alpha",
       description="Distributed IRC Daemon",
-      long_descriptin=open("README.md").read(),
       url="github.com/kzvezdarov/ircdd",
       license="GPL v3.0 or later",
-      packages=["ircdd",],
-      scripts=["bin/ircdd.py",],
+      install_requires=['twisted', ],
+      setup_requires=["flake8", "nose", ],
+      packages=find_packages(),
+      scripts=["bin/ircdd.py", ],
+      test_suite="nosetests",
       )
