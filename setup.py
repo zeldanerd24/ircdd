@@ -1,8 +1,11 @@
 #! /usr/bin/env python2.7
-import ez_setup
-ez_setup.use_setuptools()
-
-from setuptools import setup, find_packages
+try:
+    from setuptools import setup, find_packages
+except ImportError, e:
+    import ez_setup
+    ez_setup.use_setuptools()
+finally:
+    from setuptools import setup, find_packages
 
 setup(name="ircdd",
       version="alpha",
