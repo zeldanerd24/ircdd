@@ -1,30 +1,43 @@
 IRC Distributed Daemon
-=====
+* **Source**: https://github.com/kzvezdarov/ircdd
+* **Issues**: https://github.com/kzvezdarov/ircdd/issues
+* **IRC**:    ##ircdd on freenode(currently invite only)
+* **Docs**:   http://ircdd.rtfd.org
+* **Wiki**:   https://github.com/kzvezdarov/ircdd/wiki
+* **License**: GNU GPL v3.0 or later
+
 [![Build Status](https://travis-ci.org/kzvezdarov/ircdd.svg)](https://travis-ci.org/kzvezdarov/ircdd)
 
-* License: GNU GPL v3. See LICENSE for details
-* Source: `github.com/kzvezdarov/ircdd`
+[![Stories in Ready](https://badge.waffle.io/kzvezdarov/ircdd.svg?label=ready&title=Ready)](http://waffle.io/kzvezdarov/ircdd)
 
-IRCDD is a simple distributed IRC daemon.
-
-# Testing
-## Testing on Vagrant
-The repository contains a Vagrantfile for a Ubuntu 12.04 LTS machine.
-To bring the box up run `vagrant up` from the base directory - this will
-start the box and provision it with the contents of `scripts/provision.sh`
+[![Documentation Status](https://readthedocs.org/projects/ircdd/badge/?version=latest)](https://readthedocs.org/projects/ircdd/?badge=latest)
 
 
-### Running the style checker and unit tests
-To test with Vagrant:
-1. Bring the box up with `vagrant up`
-2. Run the tests `vagrant ssh -c "/vagrant/scripts/test.sh"
+**IRCDD** is an IRC daemon designed to have a scalable distributed model and strong consistency.
+
+It aims to be easily deployable both to cloud providers and user machines (creating a peer-powered cluster) via CoreOS and Docker.
 
 
-## Testing on the base OS
-### Running the style checker and unit tests
-To run the tests you need the following:
-1. Python 2.7.X 
-2. Flake8
-3. Nose
+## Documentation:
 
-After installing these just run `scripts/test.sh`
+You can read the documentation at: [readthedocs](http://ircdd.rtfd.org)
+
+In addition to that the project's [wiki](https://github.com/kzvezdarov/ircdd) might contain further useful information.
+
+
+## Contributing:
+
+Contributions are welcome once initial development is complete. Keep an eye for the 1.0 tag.
+
+
+## Authors:
+
+[Michael J. Harrison](https://github.com/MHarrison72)
+
+[Daniel McGinnis](https://github.com/danmcginnis)
+
+[Kevin K. Rothenberger](https://github.com/zeldanerd24)
+
+[Roman Senyszyn](https://github.com/Roman215)
+
+[Kiril Zvezdarov](https://github.com/kzvezdarov)
