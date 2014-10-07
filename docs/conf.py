@@ -264,3 +264,9 @@ texinfo_documents = [
 
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 #texinfo_no_detailmenu = False
+
+intersphinx_mapping = {
+        'pymongo': ('http://api.mongodb.org/python/current/', None),
+        'python' : ('http://docs.python.org/', None),
+	'ircdd'  : ('../bin/', None),
+}
