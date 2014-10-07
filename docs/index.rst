@@ -21,7 +21,6 @@ Contents:
    errors
    troubleshoot
    support
-   sample
 
 
 
