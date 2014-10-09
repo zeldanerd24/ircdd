@@ -29,5 +29,5 @@ def makeServer(ctx):
     """
     f = IRCDDFactory(ctx)
 
-    irc_server = internet.TCPServer(ctx['port'], f)
+    irc_server = internet.TCPServer(int(ctx['port']), f)
     return irc_server
