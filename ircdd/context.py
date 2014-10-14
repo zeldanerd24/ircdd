@@ -1,7 +1,7 @@
 from time import ctime
 
 from twisted import copyright
-from twisted.cred import portal, checkers
+from twisted.cred import portal
 from twisted.words import service
 import server
 
