@@ -68,7 +68,7 @@ class IRCDDUser(IRCUser):
             nickname = nickname.decode(self.encoding)
         except UnicodeDecodeError:
             self.privmsg(
-                NICKSERV,
+                service.NICKSERV,
                 nickname,
                 'Your nickname cannot be decoded. Please use ASCII or UTF-8.')
             self.transport.loseConnection()
