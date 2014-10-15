@@ -1,8 +1,9 @@
 from time import ctime
 
 from twisted import copyright
-from twisted.cred import portal, checkers
+from twisted.cred import portal
 from twisted.words import service
+import server
 
 userdata = dict(
     kzvezdarov='password',
@@ -32,7 +33,7 @@ def makeContext(config):
     ctx['realm'].addGroup(service.Group('placeholder_group'))
 
     # TODO: Make a custom checker & portal that integrate with the database?
-    mock_db = checkers.InMemoryUsernamePasswordDatabaseDontUse(**userdata)
+    mock_db = server.InMemoryUsernamePasswordDatabaseDontUse(**userdata)
     ctx['portal'] = portal.Portal(ctx['realm'], [mock_db])
 
     ctx['server_info'] = dict(
@@ -40,4 +41,5 @@ def makeContext(config):
         serviceVersion=copyright.version,
         creationDate=ctime()
         )
+
     return ctx
