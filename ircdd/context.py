@@ -1,11 +1,12 @@
 from time import ctime
+import yaml
+import nsq
 
 from twisted import copyright
 from twisted.cred import portal
 from twisted.words import service
-import server
 
-import yaml
+from ircdd import server
 
 userdata = dict(
     kzvezdarov='password',
@@ -20,7 +21,11 @@ class ConfigStore(dict):
     """
     Container for configuration values and shared acces modules.
     """
-    data = {'host': 'localhost', 'port': '5799'}
+    data = {'host': 'localhost',
+            'port': '5799',
+            'nsqd_tcp_addresses': ['localhost:6799'],
+            'lookupd_http_addresses': ['localhost:7799'],
+            }
 
     def __getitem__(self, key):
         return self.data[key]
@@ -57,8 +62,11 @@ def makeContext(config):
 
     # TODO: Initialize DB driver
     # ctx['rethinkdb'] =
-    # TODO: Initialize NSQ driver
-    # ctx['nsq'] =
+
+    # Initialize NSQ Writer
+    ctx['nsq'] = nsq.Writer(ctx['nsqd_tcp_addresses'])
+    # starts the NSQ client's IOLoop
+    nsq.run()
 
     # TODO: Make a custom realm that integrates with the database?
     ctx['realm'] = service.InMemoryWordsRealm('placeholder_realm')
