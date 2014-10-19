@@ -51,6 +51,7 @@ Starting The System
 3. Execute the following command:
 
 .. code-block:: shell-session
+
 	./scripts/launch-dev-core.sh
 
 Connecting to the System
