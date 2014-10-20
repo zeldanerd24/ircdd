@@ -21,6 +21,7 @@ Contents:
    errors
    troubleshoot
    support
+   contribute
 
 
 
@@ -30,4 +31,13 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+
+Credits
+=======
+
+:Authors:
+   Michael J. Harrison, Daniel McGinnis, Kevin K. Rothenberger, Roman Senyszyn, Kiril Zvezdarov
+   
+:Github:
+   `Repo <https://github.com/kzvezdarov/ircdd>`_
 
