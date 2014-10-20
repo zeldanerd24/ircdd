@@ -19,7 +19,6 @@ class Options(usage.Options, strcred.AuthOptionMixin):
 
     optFlags = [['ssl', 's'], ['verbose', 'v']]
 
-
     def __init__(self):
         usage.Options.__init__(self)
         self['nsqd_tcp_addresses'] = []
