@@ -1,11 +1,12 @@
 from time import ctime
+import yaml
 
 from twisted import copyright
 from twisted.cred import portal
 from twisted.words import service
-import server
 
-import yaml
+from ircdd import server
+from ircdd.remote import RemoteReadWriter
 
 userdata = dict(
     kzvezdarov='password',
@@ -20,7 +21,11 @@ class ConfigStore(dict):
     """
     Container for configuration values and shared acces modules.
     """
-    data = {'host': 'localhost', 'port': '5799'}
+    data = {'hostname': 'localhost',
+            'port': '5799',
+            'nsqd_tcp_addresses': ['127.0.0.1:4150'],
+            'lookupd_http_addresses': ['127.0.0.1:4161'],
+            }
 
     def __getitem__(self, key):
         return self.data[key]
@@ -57,11 +62,9 @@ def makeContext(config):
 
     # TODO: Initialize DB driver
     # ctx['rethinkdb'] =
-    # TODO: Initialize NSQ driver
-    # ctx['nsq'] =
 
     # TODO: Make a custom realm that integrates with the database?
-    ctx['realm'] = service.InMemoryWordsRealm('placeholder_realm')
+    ctx['realm'] = service.InMemoryWordsRealm(ctx['hostname'])
     ctx['realm'].addGroup(service.Group('placeholder_group'))
 
     # TODO: Make a custom checker & portal that integrate with the database?
@@ -73,5 +76,9 @@ def makeContext(config):
         serviceVersion=copyright.version,
         creationDate=ctime()
         )
+
+    ctx['remote_rw'] = RemoteReadWriter(ctx['nsqd_tcp_addresses'],
+                                        ctx['lookupd_http_addresses'],
+                                        ctx['hostname'])
 
     return ctx
