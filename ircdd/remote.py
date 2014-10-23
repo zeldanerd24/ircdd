@@ -95,11 +95,13 @@ class RemoteReadWriter:
         self._readers[topic].close()
         del self._readers[topic]
 
-    def publish(self, topic, msg, callback=None):
+    def publish(self, topic, msg_body, callback=None):
         """
         Publishes a message to the given queue and calls
         the optional callback once completed. Creates the
-        writer if it does not exist.
+        writer if it does not exist. The message is wrapped in
+        a container dictionary that wears the origin tag,
+        json formatted, and then given to the writer.
 
         :param topic: the name of the topic to publish to
         :type string:
@@ -114,4 +116,6 @@ class RemoteReadWriter:
 
         if self._writer is None:
             self._writer = nsq.Writer(self._nsqd_addresses)
-        self._writer.pub(topic, msg, callback=callback)
+
+        msg = dict(text=msg_body, origin=self._server_name)
+        self._writer.pub(topic, json.dumps(msg), callback=callback)

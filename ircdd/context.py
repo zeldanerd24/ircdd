@@ -63,7 +63,6 @@ def makeContext(config):
     # TODO: Initialize DB driver
     # ctx['rethinkdb'] =
 
-
     # TODO: Make a custom realm that integrates with the database?
     ctx['realm'] = service.InMemoryWordsRealm(ctx['hostname'])
     ctx['realm'].addGroup(service.Group('placeholder_group'))
