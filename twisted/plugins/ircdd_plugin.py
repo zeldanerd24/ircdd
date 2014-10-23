@@ -1,19 +1,22 @@
 from zope.interface import implements
 
 from twisted.cred import credentials, strcred
-from twisted.python import usage, log
+from twisted.python import usage
 from twisted.plugin import IPlugin
 from twisted.application.service import IServiceMaker
 
 import ircdd.server as ircdd_server
 from ircdd import context
 
+from tornado.platform.twisted import TwistedIOLoop
+TwistedIOLoop().install()
+
 
 class Options(usage.Options, strcred.AuthOptionMixin):
     supportedInterfaces = (credentials.IUsernamePassword)
 
     optParameters = [
-        ['host', 'h', 'localhost'],
+        ['hostname', 'h', '127.0.0.1'],
         ['port', 'p', 5799],
         ]
 

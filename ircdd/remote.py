@@ -1,4 +1,5 @@
 import nsq
+import json
 
 
 class RemoteReadWriter:
@@ -26,8 +27,8 @@ class RemoteReadWriter:
 
     def __init__(self, nsqd_addresses, lookupd_addresses, server_name):
         self._readers = {}
-
-        self._writer = nsq.Writer(nsqd_addresses)
+        self._writer = None
+        self._nsqd_addresses = nsqd_addresses
         self._lookupd_addresses = lookupd_addresses
         self._server_name = server_name
 
@@ -43,20 +44,44 @@ class RemoteReadWriter:
         :type string:
 
         :param callback: the callback which will be called when a message is
-        read. The callback must take a single argument (`message`) and either
-        call :meth:`nsq.Message.finish()`/:meth:`nsq.Message.requeue()` or
-        return `True`/`False` when it is done with the message.
+        read. The callback must take a single argument (`message`),
+        call :meth:`nsq.Message.finish()`/:meth:`nsq.Message.requeue()` and
+        return `True`/`False` when it is done with the message. The callback
+        can expect `message` to be :class:`nsq.Message`, with an additional
+        attribute `parsed_body` which contains the `json` parsed body of the
+        message (still available in raw from through the `body` attribute).
         :type callable:
         """
 
         if self._readers.get(topic, None) is None:
-            reader = nsq.Reader(message_handler=callback,
+            reader = nsq.Reader(message_handler=self.filter_callback(callback),
                                 lookupd_http_addresses=self._lookupd_addresses,
                                 topic=topic,
                                 channel=self._server_name,
                                 lookupd_poll_interval=15)
             self._readers[topic] = reader
-            nsq.run()
+
+    def filter_callback(self, callback):
+        """
+        Decorator function which wraps the given callback in
+        a filter that discards messages which originated from this server
+        instance server.
+
+        :param callback: the callback which will be wrapped
+        :type callable:
+        """
+
+        def filtered_callback(message):
+            parsed_body = json.loads(message.body)
+
+            if parsed_body['origin'] == self._server_name:
+                message.finish()
+                return True
+            else:
+                message.parsed_body = parsed_body
+                return callback(message)
+
+        return filtered_callback
 
     def unsubscribe(self, topic):
         """
@@ -69,3 +94,24 @@ class RemoteReadWriter:
         """
         self._readers[topic].close()
         del self._readers[topic]
+
+    def publish(self, topic, msg, callback=None):
+        """
+        Publishes a message to the given queue and calls
+        the optional callback once completed. Creates the
+        writer if it does not exist.
+
+        :param topic: the name of the topic to publish to
+        :type string:
+
+        :param msg: the message to publish
+        :type string:
+
+        :param callback: an optional callback which will be
+        called once :method:`nsq.Writer.pub()` completes.
+        :type callable:
+        """
+
+        if self._writer is None:
+            self._writer = nsq.Writer(self._nsqd_addresses)
+        self._writer.pub(topic, msg, callback=callback)
