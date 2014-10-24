@@ -11,16 +11,23 @@ from twisted.words.protocols import irc
 
 class IRCDDUser(IRCUser):
     """
-    Contains replacement methods for the twisted protocol default methods.
+    A simple integration layer on top of :class:`twisted.words.service.IRCUser`
+    which integrates it with `NSQ` and `RethinkDB` to allow for server linking
+    and state persistance.
     """
 
-    # Updated join channel method to allow creating channels that don't exist
-    # Replaces a twisted function with same name in service.IRCUser
+    def _reallySendLine(self, line):
+        super(irc.IRC, self)._reallySendLine(line)
+
     def irc_JOIN(self, prefix, params):
         """
-        Replacement Twisted IRC Join channel method
-        Creates a nonexisting channel on join attmept
-        Parameters: ( <channel> *( "," <channel> ) [ <key> *( "," <key> ) ] )
+        Handles `/join #<channel>`. First, looks up the group
+        in the realm. If the group does not exist, references the
+        database. If the group does not exist there as well (which implies
+        that it does not exist on any server in the cluster), it is created
+        locally and committed to the database. Finally, after the join is
+        authorized, publishes the join message both to the local group and
+        on the NSQ topic.
         """
         try:
             groupName = params[0].decode(self.encoding)
@@ -50,19 +57,14 @@ class IRCDDUser(IRCUser):
             return
         self.realm.getGroup(groupName).addCallbacks(cbGroup, ebGroup)
 
-    # Updated nickname checking function which allows for anonymous connection
-    # Replaces a twisted function with same name in service.IRCUser
     def irc_NICK(self, prefix, params):
-        """Nick message -- Set your nickname.
-
-        Replacement of the Twisted method
-        Instead of NickServ messaging you on empty password,
-        it ignores and allows an empty password.
-
-        Parameters: <nickname>
-
-        [REQUIRED]
         """
+        Handles `/nick <nickname>`. If the nickname exists, is not in use,
+        and is password protected (or the `strict` flag has been set), decline
+        and request password. If the nickname is not in use and `strict` is
+        off, create it log the user in with it.
+        """
+
         nickname = params[0]
         try:
             nickname = nickname.decode(self.encoding)
@@ -89,8 +91,11 @@ class IRCDDUser(IRCUser):
 
 class IRCDDFactory(protocol.ServerFactory):
     """
-    Server factory which creates instances of the modified
-    IRC protocol.
+    Factory which creates instances of the :class:`ircdd.server.IRCDDUser`
+    protocol. Expects to receive an initialized context object at creation.
+
+    :param ctx: A :class:`ircdd.context.ConfigStore` object which contains both
+    the raw config values and the initialized shared drivers.
     """
     protocol = IRCDDUser
 
@@ -106,10 +111,15 @@ class IRCDDFactory(protocol.ServerFactory):
 
 def makeServer(ctx):
     """
-    Creates and initializes an IRCDDFactory with the given context.
-    Returns:
-        A TCP server running on the specified port, serving
-        requests via the IRCDDFactory
+    Creates and initializes an :class:`ircdd.server.IRCDDFactory`
+    with the given context.
+    Returns a :class:`twisted.internet.TCPServer` running on the
+    specified `port`.
+
+    :param ctx: a :class:`ircdd.context.ConfigStore` object that
+    contains both the raw config values and the initialized shared
+    drivers.
+
     """
     f = IRCDDFactory(ctx)
 
