@@ -7,14 +7,7 @@ from twisted.words import service
 
 from ircdd import server
 from ircdd.remote import RemoteReadWriter
-
-userdata = dict(
-    kzvezdarov='password',
-    mcginnisdan='password',
-    roman215='password',
-    mikeharrison='password',
-    kevinrothenberger='password'
-    )
+from ircdd import database
 
 
 class ConfigStore(dict):
@@ -65,12 +58,23 @@ def makeContext(config):
 
     # TODO: Make a custom realm that integrates with the database?
     ctx['realm'] = service.InMemoryWordsRealm(ctx['hostname'])
-    ctx['realm'].addGroup(service.Group('placeholder_group'))
 
     # TODO: Make a custom checker & portal that integrate with the database?
-    mock_db = server.InMemoryUsernamePasswordDatabaseDontUse(**userdata)
+    mock_db = server.DatabaseCredentialsChecker()
     ctx['portal'] = portal.Portal(ctx['realm'], [mock_db])
 
+    db = database.IRCDDatabase()
+    db.initializeDB()
+    db.addUser('kzvezdarov', 'kzvezdarov@gmail.com', 'password', True, '')
+    db.addUser('mcginnisdan', 'mcginnis.dan@gmail.com', 'password', True, '')
+    db.addUser('roman215', 'Roman215@comcast.net', 'password', True, '')
+    db.addUser('mikeharrison', 'tud04305@temple.edu', 'password', True, '')
+    db.addUser('kevinrothenberger', 'tud14472@temple.edu',
+               'password', True, '')
+    db.addChannel('#ircdd', 'kzvezdarov', 'private')
+    channels = db.getChannelNames()
+    for channel in channels:
+        ctx['realm'].addGroup(service.Group(channel))
     ctx['server_info'] = dict(
         serviceName=ctx['realm'].name,
         serviceVersion=copyright.version,

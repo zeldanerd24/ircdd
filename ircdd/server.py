@@ -7,6 +7,7 @@ from twisted.python import failure
 from twisted.cred import checkers, error, credentials
 from twisted.words import service
 from twisted.words.protocols import irc
+from ircdd import database
 
 
 class IRCDDUser(IRCUser):
@@ -29,7 +30,6 @@ class IRCDDUser(IRCUser):
                 irc.ERR_NOSUCHCHANNEL, params[0],
                 ":No such channel (could not decode your unicode!)")
             return
-
         if groupName.startswith('#'):
             groupName = groupName[1:]
 
@@ -45,6 +45,8 @@ class IRCDDUser(IRCUser):
 
         def ebGroup(err):
             # if channel is not found, then add it and call this function again
+            db = database.IRCDDatabase()
+            db.addChannel(groupName, '', 'public')
             self.realm.addGroup(service.Group(groupName))
             self.irc_JOIN(prefix, params)
             return
@@ -118,17 +120,10 @@ def makeServer(ctx):
 
 
 # In memory storage and checking of nicknames/passwords
-# If user name is not found, it adds the user to the list
-class InMemoryUsernamePasswordDatabaseDontUse:
+# If user name is not found, it adds the user to the database as unregistered
+class DatabaseCredentialsChecker:
     """
-    An extremely simple credentials checker.
-
-    This is only of use in one-off test programs or examples which don't
-    want to focus too much on how credentials are verified.
-
-    You really don't want to use this for anything else.  It is, at best, a
-    toy.  If you need a simple credentials checker for a real application,
-    see L{FilePasswordDB}.
+    An extremely simple database credentials checker.
     """
 
     implements(checkers.ICredentialsChecker)
@@ -136,11 +131,10 @@ class InMemoryUsernamePasswordDatabaseDontUse:
     credentialInterfaces = (credentials.IUsernamePassword,
                             credentials.IUsernameHashedPassword)
 
-    def __init__(self, **users):
-        self.users = users
+    db = database.IRCDDatabase()
 
-    def addUser(self, username, password):
-        self.users[username] = password
+    def addUser(self, username):
+        self.db.addUser(username, '', '', False, '')
 
     def _cbPasswordMatch(self, matched, username):
         if matched:
@@ -149,12 +143,16 @@ class InMemoryUsernamePasswordDatabaseDontUse:
             return failure.Failure(error.UnauthorizedLogin())
 
     def requestAvatarId(self, credentials):
-        if credentials.username in self.users:
-            return defer.maybeDeferred(
-                credentials.checkPassword,
-                self.users[credentials.username]).addCallback(
-                self._cbPasswordMatch, str(credentials.username))
+        user = self.db.getUser(credentials.username)
+        if user is not None:
+            if user['registered'] is False:
+                return str(credentials.username)
+            else:
+                return defer.maybeDeferred(
+                    credentials.checkPassword,
+                    user['password']).addCallback(
+                    self._cbPasswordMatch, str(credentials.username))
         else:
             # this may need to be changed if we use encrypted credentials
-            self.users[credentials.username] = credentials.password
+            self.addUser(credentials.username)
             return self.requestAvatarId(credentials)
