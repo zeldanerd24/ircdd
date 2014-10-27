@@ -61,6 +61,4 @@ docs/_build/
 *.pid
 *.cache
 
-# Hacky: the script that provisions the VM updates the following file.
-#  We don't want everyone to be checking in a new version of the file for every commit
-scripts/dev-config/cloud-config.yaml
+scripts/dev-config/cloud-config-tmp.yaml
