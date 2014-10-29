@@ -6,6 +6,7 @@ from twisted.cred import portal
 from twisted.words import service
 
 from ircdd import server
+from ircdd.server import IRCDDRealm
 from ircdd.remote import RemoteReadWriter
 
 userdata = dict(
@@ -47,7 +48,7 @@ def makeContext(config):
     # if user specified a configuration file
     # overwrite defaults with values from file
     if config.get('config') is not None:
-        stream = file(config.get('config'), 'r')
+        stream = open(config.get('config'), 'r')
         del config['config']
         # yaml.load turns a file into an object/dictionary
         conFile = yaml.load(stream)
@@ -64,7 +65,7 @@ def makeContext(config):
     # ctx['rethinkdb'] =
 
     # TODO: Make a custom realm that integrates with the database?
-    ctx['realm'] = service.InMemoryWordsRealm(ctx['hostname'])
+    ctx['realm'] = IRCDDRealm(ctx, ctx['hostname'])
     ctx['realm'].addGroup(service.Group('placeholder_group'))
 
     # TODO: Make a custom checker & portal that integrate with the database?

@@ -1,12 +1,87 @@
 from zope.interface import implements
-from twisted.words.service import IRCUser
+from twisted.words.service import IRCUser, Group, User, WordsRealm
 from twisted.application import internet
-from twisted.internet import protocol
-from twisted.internet import defer
-from twisted.python import failure
+from twisted.internet import protocol, defer
+from twisted.python import failure, log
 from twisted.cred import checkers, error, credentials
-from twisted.words import service
+from twisted.words import service, ewords
 from twisted.words.protocols import irc
+
+
+class ShardedUser(User):
+    def __init__(self, ctx, name):
+        super(ShardedUser, self).__init__(name)
+        self.ctx = ctx
+
+    def send(self, recipient, message):
+        log.msg("MESSAGE %s to %s" % (str(message), str(recipient)))
+        super(ShardedUser, self).send(recipient, message)
+
+
+class ShardedGroup(Group):
+    def __init__(self, ctx, name):
+        super(ShardedGroup, self).__init__(name)
+        self.ctx = ctx
+
+    def receiveRemote(self, message):
+        # discard if originated here
+        pass
+
+
+class IRCDDRealm(WordsRealm):
+    def __init__(self, ctx, *a, **kw):
+        super(IRCDDRealm, self).__init__(*a, **kw)
+        self.ctx = ctx
+        self.users = {}
+        self.groups = {}
+
+    def userFactory(self, name):
+        return ShardedUser(self.ctx, name)
+
+    def groupFactory(self, name):
+        return ShardedGroup(self.ctx, name)
+
+    def itergroups(self):
+        # Add a lookup for remote groups?
+        return defer.succeed(self.groups.itervalues())
+
+    def addUser(self, user):
+        # check straight in the DB's user list
+        if user.name in self.users:
+            return defer.fail(failure.Failure(ewords.DuplicateUser()))
+
+        self.users[user.name] = user
+        return defer.succeed(user)
+
+    def addGroup(self, group):
+        if group.name in self.groups:
+            return defer.fail(failure.Failure(ewords.DuplicateGroup()))
+
+        self.groups[group.name] = group
+        return defer.succeed(group)
+
+    def lookupUser(self, name):
+        assert isinstance(name, unicode)
+        name = name.lower()
+        # Lookup in database also? Not sure what this
+        # method does
+        try:
+            user = self.users[name]
+        except KeyError:
+            return defer.fail(failure.Failure(ewords.NoSuchUser(name)))
+        else:
+            return defer.succeed(user)
+
+    def lookupGroup(self, name):
+        assert isinstance(name, unicode)
+        name = name.lower()
+
+        try:
+            group = self.groups[name]
+        except KeyError:
+            return defer.fail(failure.Failure(ewords.NoSuchGroup(name)))
+        else:
+            return defer.succeed(group)
 
 
 class IRCDDUser(IRCUser):
@@ -15,9 +90,6 @@ class IRCDDUser(IRCUser):
     which integrates it with `NSQ` and `RethinkDB` to allow for server linking
     and state persistance.
     """
-
-    def _reallySendLine(self, line):
-        super(irc.IRC, self)._reallySendLine(line)
 
     def irc_JOIN(self, prefix, params):
         """
@@ -29,6 +101,7 @@ class IRCDDUser(IRCUser):
         authorized, publishes the join message both to the local group and
         on the NSQ topic.
         """
+        log.msg("AVATAR %s" % str(self.avatar))
         try:
             groupName = params[0].decode(self.encoding)
         except UnicodeDecodeError:
