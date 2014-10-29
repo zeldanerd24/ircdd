@@ -25,13 +25,17 @@ class ShardedGroup(Group):
 
     def receiveRemote(self, message):
         # discard if originated here
+
+        #super(ShardedGroup, self).receive(message.sender, message.recipient, message.message)
         pass
 
 
-class IRCDDRealm(WordsRealm):
+class ShardedRealm(WordsRealm):
     def __init__(self, ctx, *a, **kw):
-        super(IRCDDRealm, self).__init__(*a, **kw)
+        super(ShardedRealm, self).__init__(*a, **kw)
         self.ctx = ctx
+        self.createUserOnRequest = True
+        self.createGroupOnRequest = True
         self.users = {}
         self.groups = {}
 
@@ -76,6 +80,9 @@ class IRCDDRealm(WordsRealm):
         assert isinstance(name, unicode)
         name = name.lower()
 
+        # lookup in self, then database.
+        # if found in database but not self,
+        # create in db and add to self before returning
         try:
             group = self.groups[name]
         except KeyError:
@@ -83,83 +90,58 @@ class IRCDDRealm(WordsRealm):
         else:
             return defer.succeed(group)
 
+    def getGroup(self, name):
+        assert isinstance(name, unicode)
 
-class IRCDDUser(IRCUser):
-    """
-    A simple integration layer on top of :class:`twisted.words.service.IRCUser`
-    which integrates it with `NSQ` and `RethinkDB` to allow for server linking
-    and state persistance.
-    """
+        # Get this setting from the cluster's policy
+        if self.createGroupOnRequest:
+            def ebGroup(err):
+                err.trap(ewords.DuplicateGroup)
+                return self.lookupGroup(name)
+            return self.createGroup(name).addErrback(ebGroup)
+        return self.lookupGroup(name)
 
-    def irc_JOIN(self, prefix, params):
-        """
-        Handles `/join #<channel>`. First, looks up the group
-        in the realm. If the group does not exist, references the
-        database. If the group does not exist there as well (which implies
-        that it does not exist on any server in the cluster), it is created
-        locally and committed to the database. Finally, after the join is
-        authorized, publishes the join message both to the local group and
-        on the NSQ topic.
-        """
-        log.msg("AVATAR %s" % str(self.avatar))
-        try:
-            groupName = params[0].decode(self.encoding)
-        except UnicodeDecodeError:
-            self.sendMessage(
-                irc.ERR_NOSUCHCHANNEL, params[0],
-                ":No such channel (could not decode your unicode!)")
-            return
+    def getUser(self, name):
+        assert isinstance(name, unicode)
 
-        if groupName.startswith('#'):
-            groupName = groupName[1:]
+        if self.createUserOnRequest:
+            def ebUser(err):
+                err.trap(ewords.DuplicateUser)
+                return self.lookupUser(name)
+            return self.createUser(name).addErrback(ebUser)
+        return self.lookupUser(name)
 
-        def cbGroup(group):
-            def cbJoin(ign):
-                self.userJoined(group, self)
-                self.names(
-                    self.name,
-                    '#' + group.name,
-                    [user.name for user in group.iterusers()])
-                self._sendTopic(group)
-            return self.avatar.join(group).addCallback(cbJoin)
+    def createGroup(self, name):
+        assert isinstance(name, unicode)
 
-        def ebGroup(err):
-            # if channel is not found, then add it and call this function again
-            self.realm.addGroup(service.Group(groupName))
-            self.irc_JOIN(prefix, params)
-            return
-        self.realm.getGroup(groupName).addCallbacks(cbGroup, ebGroup)
+        def cbLookup(group):
+            return failure.Failure(ewords.DuplicateGroup(name))
+        def ebLookup(err):
+            err.trap(ewords.NoSuchGroup)
+            return self.groupFactory(name)
 
-    def irc_NICK(self, prefix, params):
-        """
-        Handles `/nick <nickname>`. If the nickname exists, is not in use,
-        and is password protected (or the `strict` flag has been set), decline
-        and request password. If the nickname is not in use and `strict` is
-        off, create it log the user in with it.
-        """
+        name = name.lower()
 
-        nickname = params[0]
-        try:
-            nickname = nickname.decode(self.encoding)
-        except UnicodeDecodeError:
-            self.privmsg(
-                service.NICKSERV,
-                nickname,
-                'Your nickname cannot be decoded. Please use ASCII or UTF-8.')
-            self.transport.loseConnection()
-            return
+        d = self.lookupGroup(name)
+        d.addCallbacks(cbLookup, ebLookup)
+        d.addCallback(self.addGroup)
+        return d
 
-        self.nickname = nickname
-        self.name = nickname
+    def createUser(self, name):
+        assert isinstance(name, unicode)
 
-        for code, text in self._motdMessages:
-            self.sendMessage(code, text % self.factory._serverInfo)
+        def cbLookup(user):
+            return failure.Failure(ewords.DuplicateUser(name))
+        def ebLookup(err):
+            err.trap(ewords.NoSuchUser)
+            return self.userFactory(name)
 
-        if self.password is None:
-            self.password = ''
-        password = self.password
-        self.password = None
-        self.logInAs(nickname, password)
+        name = name.lower()
+
+        d = self.lookupUser(name)
+        d.addCallbacks(cbLookup, ebLookup)
+        d.addCallback(self.addUser)
+        return d
 
 
 class IRCDDFactory(protocol.ServerFactory):
@@ -170,7 +152,7 @@ class IRCDDFactory(protocol.ServerFactory):
     :param ctx: A :class:`ircdd.context.ConfigStore` object which contains both
     the raw config values and the initialized shared drivers.
     """
-    protocol = IRCDDUser
+    protocol = IRCUser
 
     def __init__(self, ctx):
         # This is to support the stock IRCUser.

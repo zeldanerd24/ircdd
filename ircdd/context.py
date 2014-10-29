@@ -6,7 +6,7 @@ from twisted.cred import portal
 from twisted.words import service
 
 from ircdd import server
-from ircdd.server import IRCDDRealm
+from ircdd.server import ShardedRealm
 from ircdd.remote import RemoteReadWriter
 
 userdata = dict(
@@ -65,7 +65,7 @@ def makeContext(config):
     # ctx['rethinkdb'] =
 
     # TODO: Make a custom realm that integrates with the database?
-    ctx['realm'] = IRCDDRealm(ctx, ctx['hostname'])
+    ctx['realm'] = ShardedRealm(ctx, ctx['hostname'])
     ctx['realm'].addGroup(service.Group('placeholder_group'))
 
     # TODO: Make a custom checker & portal that integrate with the database?
