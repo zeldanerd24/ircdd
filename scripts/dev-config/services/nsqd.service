@@ -4,12 +4,11 @@ After=docker.service
 Requires=docker.service
 
 [Service]
-TimeoutStartSec=60
-ExecStartPre=-/usr/bin/docker kill nsqd-%i
-ExecStartPre=-/usr/bin/docker rm nsqd-%i
-ExecStartPre=/usr/bin/docker pull dockerfile/nsq
-ExecStart=/usr/bin/docker run --name nsqd-%i -p 4150:4150 -p 4151:4151 dockerfile/nsq nsqd
-ExecStop=/usr/bin/docker stop nsqd-%i
+TimeoutStartSec=5
+ExecStartPre=-/usr/bin/docker kill nsqd
+ExecStartPre=-/usr/bin/docker rm nsqd
+ExecStart=/usr/bin/docker run --name nsqd -p 4150:4150 -p 4151:4151 dockerfile/nsq nsqd
+ExecStop=/usr/bin/docker stop nsqd
 
 [X-Fleet]
 Global=true
