@@ -4,38 +4,53 @@ from twisted.application import internet
 from twisted.internet import protocol, defer
 from twisted.python import failure, log
 from twisted.cred import checkers, error, credentials
-from twisted.words import service, ewords
-from twisted.words.protocols import irc
+from twisted.words import ewords
 
 
 class ShardedUser(User):
     def __init__(self, ctx, name):
         super(ShardedUser, self).__init__(name)
         self.ctx = ctx
+        self.ctx["remote_rw"].subscribe(self.name, self.receiveRemote)
 
     def send(self, recipient, message):
-        log.msg("MESSAGE %s to %s" % (str(message), str(recipient)))
+        if isinstance(recipient, IRCUser):
+            recipient_name = recipient.nickname
+        else:
+            recipient_name = recipient.name
+
+        message["sender"] = self.name
+        message["recipient"] = recipient_name
+
+        self.ctx["remote_rw"].publish(recipient_name, message)
         super(ShardedUser, self).send(recipient, message)
+
+    def receiveRemote(self, message):
+        # sender only contains a "name" attribute
+        sender = message.sender
+        self.mind.receive(sender, self, message)
 
 
 class ShardedGroup(Group):
     def __init__(self, ctx, name):
         super(ShardedGroup, self).__init__(name)
         self.ctx = ctx
+        self.ctx["remote_rw"].subscribe(self.name, self.receiveRemote)
 
     def receiveRemote(self, message):
-        # discard if originated here
-
-        #super(ShardedGroup, self).receive(message.sender, message.recipient, message.message)
-        pass
+        body = message["msg_body"]
+        super(ShardedGroup, self).receive(body["sender"],
+                                          self,
+                                          body["text"])
+        message.finish()
 
 
 class ShardedRealm(WordsRealm):
     def __init__(self, ctx, *a, **kw):
         super(ShardedRealm, self).__init__(*a, **kw)
         self.ctx = ctx
-        self.createUserOnRequest = True
-        self.createGroupOnRequest = True
+        self.createUserOnRequest = ctx["user_on_request"]
+        self.createGroupOnRequest = ctx["group_on_request"]
         self.users = {}
         self.groups = {}
 
@@ -99,6 +114,8 @@ class ShardedRealm(WordsRealm):
                 err.trap(ewords.DuplicateGroup)
                 return self.lookupGroup(name)
             return self.createGroup(name).addErrback(ebGroup)
+
+        log.msg("Getting group %s" % name)
         return self.lookupGroup(name)
 
     def getUser(self, name):
@@ -109,6 +126,8 @@ class ShardedRealm(WordsRealm):
                 err.trap(ewords.DuplicateUser)
                 return self.lookupUser(name)
             return self.createUser(name).addErrback(ebUser)
+
+        log.msg("Getting user %s" % name)
         return self.lookupUser(name)
 
     def createGroup(self, name):
@@ -116,6 +135,7 @@ class ShardedRealm(WordsRealm):
 
         def cbLookup(group):
             return failure.Failure(ewords.DuplicateGroup(name))
+
         def ebLookup(err):
             err.trap(ewords.NoSuchGroup)
             return self.groupFactory(name)
@@ -125,6 +145,8 @@ class ShardedRealm(WordsRealm):
         d = self.lookupGroup(name)
         d.addCallbacks(cbLookup, ebLookup)
         d.addCallback(self.addGroup)
+
+        log.msg("Creating group %s" % name)
         return d
 
     def createUser(self, name):
@@ -132,6 +154,7 @@ class ShardedRealm(WordsRealm):
 
         def cbLookup(user):
             return failure.Failure(ewords.DuplicateUser(name))
+
         def ebLookup(err):
             err.trap(ewords.NoSuchUser)
             return self.userFactory(name)
@@ -141,6 +164,8 @@ class ShardedRealm(WordsRealm):
         d = self.lookupUser(name)
         d.addCallbacks(cbLookup, ebLookup)
         d.addCallback(self.addUser)
+
+        log.msg("Creating user %s" % name)
         return d
 
 

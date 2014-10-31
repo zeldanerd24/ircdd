@@ -24,8 +24,8 @@ class ConfigStore(dict):
     """
     data = {'hostname': 'localhost',
             'port': '5799',
-            'nsqd_tcp_addresses': ['127.0.0.1:4150'],
-            'lookupd_http_addresses': ['127.0.0.1:4161'],
+            'nsqd_tcp_address': ['127.0.0.1:4150'],
+            'lookupd_http_address': ['127.0.0.1:4161'],
             }
 
     def __getitem__(self, key):
@@ -66,7 +66,6 @@ def makeContext(config):
 
     # TODO: Make a custom realm that integrates with the database?
     ctx['realm'] = ShardedRealm(ctx, ctx['hostname'])
-    ctx['realm'].addGroup(service.Group('placeholder_group'))
 
     # TODO: Make a custom checker & portal that integrate with the database?
     mock_db = server.InMemoryUsernamePasswordDatabaseDontUse(**userdata)
@@ -78,8 +77,8 @@ def makeContext(config):
         creationDate=ctime()
         )
 
-    ctx['remote_rw'] = RemoteReadWriter(ctx['nsqd_tcp_addresses'],
-                                        ctx['lookupd_http_addresses'],
+    ctx['remote_rw'] = RemoteReadWriter(ctx['nsqd_tcp_address'],
+                                        ctx['lookupd_http_address'],
                                         ctx['hostname'])
 
     return ctx

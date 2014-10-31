@@ -1,8 +1,36 @@
 import nsq
 import json
+import requests
+from twisted.python import log
 
 
-class RemoteReadWriter:
+def _create_topic(topic, lookupd_http_addresses):
+    for addr in lookupd_http_addresses:
+        # create_topic URI is deprecated but the
+        # does not work so use this instead
+        endpoint = "http://%s/create_topic" % addr
+        params = {"topic": topic}
+
+        response = requests.get(endpoint, params=params)
+
+        # Straight up crash if topic cannot be created
+        response.raise_for_status()
+
+
+def _create_channel(topic, chan, lookupd_http_addresses):
+    for addr in lookupd_http_addresses:
+        # create_channel URI is deprecated bu the
+        # replacement does not seem to be working
+        endpoint = "http://%s/create_channel" % addr
+        params = {"topic": topic, "channel": chan}
+
+        response = requests.get(endpoint, params=params)
+
+        # Just crash if channel cannot be created
+        response.raise_for_status()
+
+
+class RemoteReadWriter(object):
     """
     A high level producer/consumer for publishing/consuming from NSQ.
     Maintains a single long-lived `nsq.Writer`, a set of `nsq.Reader`s,
@@ -31,6 +59,7 @@ class RemoteReadWriter:
         self._nsqd_addresses = nsqd_addresses
         self._lookupd_addresses = lookupd_addresses
         self._server_name = server_name
+        log.msg(self._server_name)
 
     def subscribe(self, topic, callback):
         """
@@ -52,14 +81,20 @@ class RemoteReadWriter:
         message (still available in raw from through the `body` attribute).
         :type callable:
         """
+        # Check if topic exists, if not - create it
+        # Check if channel exists, if not - create it
 
-        if self._readers.get(topic, None) is None:
+        if not self._readers.get(topic, None):
+            _create_topic(topic, self._lookupd_addresses)
+            _create_channel(topic, self._server_name, self._lookupd_addresses)
+
             reader = nsq.Reader(message_handler=self.filter_callback(callback),
                                 lookupd_http_addresses=self._lookupd_addresses,
                                 topic=topic,
                                 channel=self._server_name,
-                                lookupd_poll_interval=15)
+                                lookupd_poll_interval=5)
             self._readers[topic] = reader
+            log.msg("Subscribed on %s on %s" % (topic, self._server_name))
 
     def filter_callback(self, callback):
         """
@@ -75,6 +110,7 @@ class RemoteReadWriter:
             parsed_body = json.loads(message.body)
 
             if parsed_body['origin'] == self._server_name:
+                log.msg("Message %s discarded: local" % str(message))
                 message.finish()
                 return True
             else:
@@ -94,6 +130,7 @@ class RemoteReadWriter:
         """
         self._readers[topic].close()
         del self._readers[topic]
+        log.msg("Unsubscribed from %s on %s" % (topic, self._server_name))
 
     def publish(self, topic, msg_body, callback=None):
         """
@@ -111,11 +148,19 @@ class RemoteReadWriter:
 
         :param callback: an optional callback which will be
         called once :method:`nsq.Writer.pub()` completes.
+        Defaults to a logging callback.
         :type callable:
         """
 
         if self._writer is None:
             self._writer = nsq.Writer(self._nsqd_addresses)
 
-        msg = dict(text=msg_body, origin=self._server_name)
+        msg = dict(msg_body=msg_body, origin=self._server_name)
+
+        def finish_pub(conn, data):
+            if isinstance(data, nsq.Error):
+                log.err("NSQ Error: on %s, data is %s" %
+                        (conn, data))
+        if not callback:
+            callback = finish_pub
         self._writer.pub(topic, json.dumps(msg), callback=callback)
