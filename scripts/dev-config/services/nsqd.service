@@ -8,9 +8,7 @@ TimeoutStartSec=60
 ExecStartPre=-/usr/bin/docker kill nsqd-%i
 ExecStartPre=-/usr/bin/docker rm nsqd-%i
 ExecStartPre=/usr/bin/docker pull dockerfile/nsq
-
-ExecStart=/usr/bin/docker run --name nsqd-%i dockerfile/nsq nsqd
-
+ExecStart=/usr/bin/docker run --name nsqd-%i -p 4150:4150 -p 4151:4151 dockerfile/nsq nsqd
 ExecStop=/usr/bin/docker stop nsqd-%i
 
 [X-Fleet]
