@@ -3,7 +3,8 @@ FROM dockerfile/python
 RUN pip install flake8 && \
     pip install nose && \
     pip install twisted && \
-    pip install setuptools
+    pip install setuptools && \
+    pip install rethinkdb
 
 WORKDIR /data
 
