@@ -59,7 +59,6 @@ def makeContext(config):
     # TODO: Initialize DB driver
     # ctx['rethinkdb'] =
 
-    # TODO: Make a custom realm that integrates with the database?
     ctx['realm'] = ShardedRealm(ctx, ctx['hostname'])
 
     # TODO: Make a custom checker & portal that integrate with the database?

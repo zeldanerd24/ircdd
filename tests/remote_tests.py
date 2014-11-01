@@ -1,5 +1,4 @@
 import mock
-import requests
 import responses
 from ircdd.remote import RemoteReadWriter
 from nose.tools import assert_raises
@@ -21,8 +20,10 @@ class TestRemoteReadWriter:
         topic = "testopic"
         callback = "callback"
 
-        responses.add(responses.GET, "http://testserver:5566/create_topic", status=200)
-        responses.add(responses.GET, "http://testserver:5566/create_channel", status=200)
+        responses.add(responses.GET, "http://testserver:5566/create_topic",
+                      status=200)
+        responses.add(responses.GET, "http://testserver:5566/create_channel",
+                      status=200)
 
         rw.subscribe(topic, callback)
 
@@ -42,8 +43,10 @@ class TestRemoteReadWriter:
         topic = "testopic"
         callback = "callback"
 
-        responses.add(responses.GET, "http://testserver:5566/create_topic", status=200)
-        responses.add(responses.GET, "http://testserver:5566/create_channel", status=200)
+        responses.add(responses.GET, "http://testserver:5566/create_topic",
+                      status=200)
+        responses.add(responses.GET, "http://testserver:5566/create_channel",
+                      status=200)
 
         rw.subscribe(topic, callback)
 

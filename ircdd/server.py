@@ -30,6 +30,9 @@ class ShardedUser(User):
             3. Add message to the database chat log.
             4. Dispatch message to the local shard of the
             recipient, if any.
+
+        :param recipient: the IRCUser/Group to send to.
+        :param message: the message to send.
         """
         if isinstance(recipient, IRCUser):
             recipient_name = recipient.nickname
@@ -46,10 +49,10 @@ class ShardedUser(User):
         """
         Callback which is executed when the Reader for this user's
         topic receives a message.
+
         :param message: A :class:`nsq.Message` which
         contains the IRC message and metadata in its parsed body.
         """
-        # sender only contains a "name" attribute
         parsed_msg = message.parsed_msg
 
         self.mind.receive(parsed_msg["msg_body"]["sender"],
@@ -73,6 +76,7 @@ class ShardedGroup(Group):
         """
         Callback which is executed when the Reader for this group's
         topic receives a message.
+
         :param message: A :class:`nsq.Message` which contains
         the IRC message and metadata in its parsed_body.
         """
@@ -224,6 +228,15 @@ class ShardedRealm(WordsRealm):
 
 class IRCDDUser(IRCUser):
     def receive(self, sender, recipient, message):
+        """
+        Receives a message from the sender for the given recipient.
+
+        :param sender: Who is sending the message.
+        :param recipient: Who is receiving the message; not neccessarily
+        this IRCUser.
+        :param message: A message dictionary. If remote, the message will
+        contain additional metadata.
+        """
         # This is an ugly hack and needs to be fixed. Maybe
         # defining some serializable "shell" IRCUser that can
         # be passed around with the NSQ messages?

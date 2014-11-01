@@ -131,7 +131,7 @@ class RemoteReadWriter(object):
         def filtered_callback(message):
             parsed_msg = json.loads(message.body)
 
-            if parsed_msg['origin'] != self._server_name:
+            if parsed_msg['origin'] == self._server_name:
                 message.finish()
                 return True
             else:
