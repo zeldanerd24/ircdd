@@ -1,96 +1,258 @@
 from zope.interface import implements
-from twisted.words.service import IRCUser
+from twisted.words.service import IRCUser, Group, User, WordsRealm
 from twisted.application import internet
-from twisted.internet import protocol
-from twisted.internet import defer
-from twisted.python import failure
+from twisted.internet import protocol, defer
+from twisted.python import failure, log
 from twisted.cred import checkers, error, credentials
-from twisted.words import service
-from twisted.words.protocols import irc
+from twisted.words import ewords, iwords
+
+
+class ShardedUser(User):
+    """
+    A User which may exist in a sharded state on different IRC
+    servers. It subscribes to its own topic on the message queue
+    and sends/responds to remote messages.
+    """
+    def __init__(self, ctx, name):
+        super(ShardedUser, self).__init__(name)
+        self.ctx = ctx
+        self.ctx["remote_rw"].subscribe(self.name, self.receiveRemote)
+
+    def send(self, recipient, message):
+        """
+        Sends message to the given recipient, even if the
+        recipient is not local.
+        Sending is done in four steps:
+            1. Determine that recipient exists via the
+            database.
+            2. Dispatch message to the recipient's
+            message topic.
+            3. Add message to the database chat log.
+            4. Dispatch message to the local shard of the
+            recipient, if any.
+        """
+        if isinstance(recipient, IRCUser):
+            recipient_name = recipient.nickname
+        else:
+            recipient_name = recipient.name
+
+        message["sender"] = dict(name=self.name, hostname=self.ctx["hostname"])
+        message["recipient"] = recipient_name
+
+        self.ctx["remote_rw"].publish(recipient_name, message)
+        super(ShardedUser, self).send(recipient, message)
+
+    def receiveRemote(self, message):
+        """
+        Callback which is executed when the Reader for this user's
+        topic receives a message.
+        :param message: A :class:`nsq.Message` which
+        contains the IRC message and metadata in its parsed body.
+        """
+        # sender only contains a "name" attribute
+        parsed_msg = message.parsed_msg
+
+        self.mind.receive(parsed_msg["msg_body"]["sender"],
+                          self, parsed_msg["msg_body"])
+
+        message.finish()
+
+
+class ShardedGroup(Group):
+    """
+    A group which may exist in a sharded state on different
+    servers. It subscribes to its own topic on the message queue
+    and sends/receives remote messages.
+    """
+    def __init__(self, ctx, name):
+        super(ShardedGroup, self).__init__(name)
+        self.ctx = ctx
+        self.ctx["remote_rw"].subscribe(self.name, self.receiveRemote)
+
+    def receiveRemote(self, message):
+        """
+        Callback which is executed when the Reader for this group's
+        topic receives a message.
+        :param message: A :class:`nsq.Message` which contains
+        the IRC message and metadata in its parsed_body.
+        """
+        parsed_msg = message.parsed_msg
+        super(ShardedGroup, self).receive(parsed_msg["msg_body"]["sender"],
+                                          self,
+                                          parsed_msg.get("msg_body", None))
+        message.finish()
+
+
+class ShardedRealm(WordsRealm):
+    """
+    A realm which may exist in a sharded state on different
+    servers. It works with :class:`ircdd.server.ShardedUser` and
+    :class:`ircdd.server.ShardedGroup` and handles operations on those
+    both for the local shard and the common state in the database.
+    """
+    def __init__(self, ctx, *a, **kw):
+        super(ShardedRealm, self).__init__(*a, **kw)
+        self.ctx = ctx
+        self.createUserOnRequest = ctx["user_on_request"]
+        self.createGroupOnRequest = ctx["group_on_request"]
+        self.users = {}
+        self.groups = {}
+
+    def userFactory(self, name):
+        return ShardedUser(self.ctx, name)
+
+    def groupFactory(self, name):
+        return ShardedGroup(self.ctx, name)
+
+    def itergroups(self):
+        # TODO: Integrate database.
+        # Add a lookup for remote groups?
+        return defer.succeed(self.groups.itervalues())
+
+    def addUser(self, user):
+        # TODO: Integrate database.
+        # check straight in the DB's user list
+        if user.name in self.users:
+            return defer.fail(failure.Failure(ewords.DuplicateUser()))
+
+        self.users[user.name] = user
+        return defer.succeed(user)
+
+    def addGroup(self, group):
+        # TODO: Integrate database.
+        if group.name in self.groups:
+            return defer.fail(failure.Failure(ewords.DuplicateGroup()))
+
+        self.groups[group.name] = group
+        return defer.succeed(group)
+
+    def lookupUser(self, name):
+        # TODO: Integrate database.
+        assert isinstance(name, unicode)
+        name = name.lower()
+        # Lookup in database also? Not sure what this
+        # method does
+        try:
+            user = self.users[name]
+        except KeyError:
+            return defer.fail(failure.Failure(ewords.NoSuchUser(name)))
+        else:
+            return defer.succeed(user)
+
+    def lookupGroup(self, name):
+        # TODO: Integrate database.
+        assert isinstance(name, unicode)
+        name = name.lower()
+
+        # lookup in self, then database.
+        # if found in database but not self,
+        # create in db and add to self before returning
+        try:
+            group = self.groups[name]
+        except KeyError:
+            return defer.fail(failure.Failure(ewords.NoSuchGroup(name)))
+        else:
+            return defer.succeed(group)
+
+    def getGroup(self, name):
+        # TODO: Integrate database.
+        assert isinstance(name, unicode)
+
+        # Get this setting from the cluster's policy
+        if self.createGroupOnRequest:
+            def ebGroup(err):
+                err.trap(ewords.DuplicateGroup)
+                return self.lookupGroup(name)
+            return self.createGroup(name).addErrback(ebGroup)
+
+        log.msg("Getting group %s" % name)
+        return self.lookupGroup(name)
+
+    def getUser(self, name):
+        # TODO: Integrate database.
+        assert isinstance(name, unicode)
+
+        if self.createUserOnRequest:
+            def ebUser(err):
+                err.trap(ewords.DuplicateUser)
+                return self.lookupUser(name)
+            return self.createUser(name).addErrback(ebUser)
+
+        log.msg("Getting user %s" % name)
+        return self.lookupUser(name)
+
+    def createGroup(self, name):
+        # TODO: Integrate database.
+        assert isinstance(name, unicode)
+
+        def cbLookup(group):
+            return failure.Failure(ewords.DuplicateGroup(name))
+
+        def ebLookup(err):
+            err.trap(ewords.NoSuchGroup)
+            return self.groupFactory(name)
+
+        name = name.lower()
+
+        d = self.lookupGroup(name)
+        d.addCallbacks(cbLookup, ebLookup)
+        d.addCallback(self.addGroup)
+
+        log.msg("Creating group %s" % name)
+        return d
+
+    def createUser(self, name):
+        # TODO: Integrate database.
+        assert isinstance(name, unicode)
+
+        def cbLookup(user):
+            return failure.Failure(ewords.DuplicateUser(name))
+
+        def ebLookup(err):
+            err.trap(ewords.NoSuchUser)
+            return self.userFactory(name)
+
+        name = name.lower()
+
+        d = self.lookupUser(name)
+        d.addCallbacks(cbLookup, ebLookup)
+        d.addCallback(self.addUser)
+
+        log.msg("Creating user %s" % name)
+        return d
 
 
 class IRCDDUser(IRCUser):
-    """
-    Contains replacement methods for the twisted protocol default methods.
-    """
+    def receive(self, sender, recipient, message):
+        # This is an ugly hack and needs to be fixed. Maybe
+        # defining some serializable "shell" IRCUser that can
+        # be passed around with the NSQ messages?
+        if isinstance(sender, dict):
+            sender_name = sender.get("name", None)
+        else:
+            sender_name = sender.name
 
-    # Updated join channel method to allow creating channels that don't exist
-    # Replaces a twisted function with same name in service.IRCUser
-    def irc_JOIN(self, prefix, params):
-        """
-        Replacement Twisted IRC Join channel method
-        Creates a nonexisting channel on join attmept
-        Parameters: ( <channel> *( "," <channel> ) [ <key> *( "," <key> ) ] )
-        """
-        try:
-            groupName = params[0].decode(self.encoding)
-        except UnicodeDecodeError:
-            self.sendMessage(
-                irc.ERR_NOSUCHCHANNEL, params[0],
-                ":No such channel (could not decode your unicode!)")
-            return
+        hostname = self.hostname
 
-        if groupName.startswith('#'):
-            groupName = groupName[1:]
+        if iwords.IGroup.providedBy(recipient):
+            recipient_name = "#" + recipient.name
+        else:
+            recipient_name = recipient.name
 
-        def cbGroup(group):
-            def cbJoin(ign):
-                self.userJoined(group, self)
-                self.names(
-                    self.name,
-                    '#' + group.name,
-                    [user.name for user in group.iterusers()])
-                self._sendTopic(group)
-            return self.avatar.join(group).addCallback(cbJoin)
+        text = message.get("text", "<an unrepresentable message>")
 
-        def ebGroup(err):
-            # if channel is not found, then add it and call this function again
-            self.realm.addGroup(service.Group(groupName))
-            self.irc_JOIN(prefix, params)
-            return
-        self.realm.getGroup(groupName).addCallbacks(cbGroup, ebGroup)
-
-    # Updated nickname checking function which allows for anonymous connection
-    # Replaces a twisted function with same name in service.IRCUser
-    def irc_NICK(self, prefix, params):
-        """Nick message -- Set your nickname.
-
-        Replacement of the Twisted method
-        Instead of NickServ messaging you on empty password,
-        it ignores and allows an empty password.
-
-        Parameters: <nickname>
-
-        [REQUIRED]
-        """
-        nickname = params[0]
-        try:
-            nickname = nickname.decode(self.encoding)
-        except UnicodeDecodeError:
-            self.privmsg(
-                service.NICKSERV,
-                nickname,
-                'Your nickname cannot be decoded. Please use ASCII or UTF-8.')
-            self.transport.loseConnection()
-            return
-
-        self.nickname = nickname
-        self.name = nickname
-
-        for code, text in self._motdMessages:
-            self.sendMessage(code, text % self.factory._serverInfo)
-
-        if self.password is None:
-            self.password = ''
-        password = self.password
-        self.password = None
-        self.logInAs(nickname, password)
+        for L in text.splitlines():
+            self.privmsg("%s!%s@%s" % (sender_name, sender_name, hostname),
+                         recipient_name, L)
 
 
 class IRCDDFactory(protocol.ServerFactory):
     """
-    Server factory which creates instances of the modified
-    IRC protocol.
+    Factory which creates instances of the :class:`ircdd.server.IRCDDUser`
+    protocol. Expects to receive an initialized context object at creation.
+
+    :param ctx: A :class:`ircdd.context.ConfigStore` object which contains both
+    the raw config values and the initialized shared drivers.
     """
     protocol = IRCDDUser
 
@@ -106,10 +268,15 @@ class IRCDDFactory(protocol.ServerFactory):
 
 def makeServer(ctx):
     """
-    Creates and initializes an IRCDDFactory with the given context.
-    Returns:
-        A TCP server running on the specified port, serving
-        requests via the IRCDDFactory
+    Creates and initializes an :class:`ircdd.server.IRCDDFactory`
+    with the given context.
+    Returns a :class:`twisted.internet.TCPServer` running on the
+    specified `port`.
+
+    :param ctx: a :class:`ircdd.context.ConfigStore` object that
+    contains both the raw config values and the initialized shared
+    drivers.
+
     """
     f = IRCDDFactory(ctx)
 
