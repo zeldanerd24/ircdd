@@ -1,7 +1,8 @@
+import logging
 from zope.interface import implements
 
 from twisted.cred import credentials, strcred
-from twisted.python import usage
+from twisted.python import usage, log
 from twisted.plugin import IPlugin
 from twisted.application.service import IServiceMaker
 
@@ -11,27 +12,34 @@ from ircdd import context
 from tornado.platform.twisted import TwistedIOLoop
 TwistedIOLoop().install()
 
+logging.basicConfig()
+observer = log.PythonLoggingObserver()
+observer.start()
+
 
 class Options(usage.Options, strcred.AuthOptionMixin):
     supportedInterfaces = (credentials.IUsernamePassword)
 
     optParameters = [
-        ['hostname', 'h', '127.0.0.1'],
-        ['port', 'p', 5799],
+        ["hostname", "h", "127.0.0.1"],
+        ["port", "p", 5799],
         ]
 
-    optFlags = [['ssl', 's'], ['verbose', 'v']]
+    optFlags = [["ssl", "S"],
+                ["verbose", "V"],
+                ["group_on_request", "G"],
+                ["user_on_request", "U"]]
 
     def __init__(self):
         usage.Options.__init__(self)
-        self['nsqd_tcp_addresses'] = []
-        self['lookupd_http_addresses'] = []
+        self['nsqd_tcp_address'] = []
+        self['lookupd_http_address'] = []
 
-    def opt_nsqd_tcp_addresses(self, address):
-        self['nsqd_tcp_addresses'].append(address)
+    def opt_nsqd_tcp_address(self, address):
+        self['nsqd_tcp_address'].append(address)
 
-    def opt_lookupd_http_addresses(self, address):
-        self['lookupd_http_addresses'].append(address)
+    def opt_lookupd_http_address(self, address):
+        self['lookupd_http_address'].append(address)
 
 
 class IRCDDServiceMaker():
