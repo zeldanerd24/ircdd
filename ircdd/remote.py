@@ -1,8 +1,60 @@
 import nsq
 import json
+import requests
+from twisted.python import log
 
 
-class RemoteReadWriter:
+def _create_topic(topic, lookupd_http_addresses):
+    """
+    Utility function which creates the requested topic
+    on each of the given lookupd http addresses.
+    :param topic: The name of the topic to create.
+    :type string:
+    :param lookupd_http_adddresses: A list of address
+    strings that point to `NSQLookupd` instances.
+    :type list:
+    """
+    for addr in lookupd_http_addresses:
+        # create_topic URI is deprecated but the
+        # does not work so use this instead
+        endpoint = "http://%s/create_topic" % addr
+        params = {"topic": topic}
+
+        response = requests.get(endpoint, params=params)
+
+        if response.status_code != requests.codes.ok:
+            log.err("Failed to create topic %s on %s: %s" %
+                    (topic, endpoint, str(response)))
+
+
+def _create_channel(topic, chan, lookupd_http_addresses):
+    """
+    Utility function which creates the requested channel
+    on the specified topic for each of the given
+    lookupd http addresses.
+    :param topic: The name of the topic on which the channel
+    will be registered.
+    :type string:
+    :param chan: The name of the channel to create.
+    :type string:
+    :param lookupd_http_adddresses: A list of address
+    strings that point to `NSQLookupd` instances.
+    :type list:
+    """
+    for addr in lookupd_http_addresses:
+        # create_channel URI is deprecated bu the
+        # replacement does not seem to be working
+        endpoint = "http://%s/create_channel" % addr
+        params = {"topic": topic, "channel": chan}
+
+        response = requests.get(endpoint, params=params)
+
+        if response.status_code != requests.codes.ok:
+            log.err("Failed to create channel %s for topic %s on %s: %s" %
+                    (chan, topic, endpoint, str(response)))
+
+
+class RemoteReadWriter(object):
     """
     A high level producer/consumer for publishing/consuming from NSQ.
     Maintains a single long-lived `nsq.Writer`, a set of `nsq.Reader`s,
@@ -34,8 +86,7 @@ class RemoteReadWriter:
 
     def subscribe(self, topic, callback):
         """
-        Used to subscribe a callback to a topic. Typically used by
-        :class:`ircdd.server.IRCDDUser` and :class:`ircdd.server.IRCDDGroup`.
+        Used to subscribe a callback to a topic.
         It will spin up a new :class:`nsq.Reader` for the given topic if one
         does not exist already and register the given callback with it.
         Only one callback per topic exists.
@@ -52,14 +103,20 @@ class RemoteReadWriter:
         message (still available in raw from through the `body` attribute).
         :type callable:
         """
+        # Check if topic exists, if not - create it
+        # Check if channel exists, if not - create it
 
-        if self._readers.get(topic, None) is None:
+        if not self._readers.get(topic, None):
+            _create_topic(topic, self._lookupd_addresses)
+            _create_channel(topic, self._server_name, self._lookupd_addresses)
+
             reader = nsq.Reader(message_handler=self.filter_callback(callback),
                                 lookupd_http_addresses=self._lookupd_addresses,
                                 topic=topic,
                                 channel=self._server_name,
-                                lookupd_poll_interval=15)
+                                lookupd_poll_interval=5)
             self._readers[topic] = reader
+            log.msg("Subscribed on %s on %s" % (topic, self._server_name))
 
     def filter_callback(self, callback):
         """
@@ -72,28 +129,28 @@ class RemoteReadWriter:
         """
 
         def filtered_callback(message):
-            parsed_body = json.loads(message.body)
+            parsed_msg = json.loads(message.body)
 
-            if parsed_body['origin'] == self._server_name:
+            if parsed_msg['origin'] != self._server_name:
                 message.finish()
                 return True
             else:
-                message.parsed_body = parsed_body
+                message.parsed_msg = parsed_msg
                 return callback(message)
 
         return filtered_callback
 
     def unsubscribe(self, topic):
         """
-        Unsubscribes a callback from the given topic. Typically used by
-        :class:`ircdd.server.IRCDDUser` and :class:`ircdd.server.IRCDDGroup`.
-        It will shut down the reader.
+        Unsubscribes a callback from the given topic and
+        shut down the reader.
 
         :param topic: the topic for which to stop listening.
         :type string:
         """
         self._readers[topic].close()
         del self._readers[topic]
+        log.msg("Unsubscribed from %s on %s" % (topic, self._server_name))
 
     def publish(self, topic, msg_body, callback=None):
         """
@@ -111,11 +168,20 @@ class RemoteReadWriter:
 
         :param callback: an optional callback which will be
         called once :method:`nsq.Writer.pub()` completes.
+        Defaults to a logging callback.
         :type callable:
         """
 
         if self._writer is None:
             self._writer = nsq.Writer(self._nsqd_addresses)
 
-        msg = dict(text=msg_body, origin=self._server_name)
+        msg = dict(msg_body=msg_body, origin=self._server_name)
+
+        def finish_pub(conn, data):
+            if isinstance(data, nsq.Error):
+                log.err("NSQ Error: on %s, data is %s" %
+                        (conn, data))
+        if not callback:
+            callback = finish_pub
+
         self._writer.pub(topic, json.dumps(msg), callback=callback)
