@@ -3,9 +3,9 @@ import yaml
 
 from twisted import copyright
 from twisted.cred import portal
-from twisted.words import service
 
 from ircdd import server
+from ircdd.server import ShardedRealm
 from ircdd.remote import RemoteReadWriter
 
 userdata = dict(
@@ -21,11 +21,7 @@ class ConfigStore(dict):
     """
     Container for configuration values and shared acces modules.
     """
-    data = {'hostname': 'localhost',
-            'port': '5799',
-            'nsqd_tcp_addresses': ['127.0.0.1:4150'],
-            'lookupd_http_addresses': ['127.0.0.1:4161'],
-            }
+    data = {}
 
     def __getitem__(self, key):
         return self.data[key]
@@ -47,7 +43,7 @@ def makeContext(config):
     # if user specified a configuration file
     # overwrite defaults with values from file
     if config.get('config') is not None:
-        stream = file(config.get('config'), 'r')
+        stream = open(config.get('config'), 'r')
         del config['config']
         # yaml.load turns a file into an object/dictionary
         conFile = yaml.load(stream)
@@ -64,8 +60,7 @@ def makeContext(config):
     # ctx['rethinkdb'] =
 
     # TODO: Make a custom realm that integrates with the database?
-    ctx['realm'] = service.InMemoryWordsRealm(ctx['hostname'])
-    ctx['realm'].addGroup(service.Group('placeholder_group'))
+    ctx['realm'] = ShardedRealm(ctx, ctx['hostname'])
 
     # TODO: Make a custom checker & portal that integrate with the database?
     mock_db = server.InMemoryUsernamePasswordDatabaseDontUse(**userdata)
@@ -77,8 +72,8 @@ def makeContext(config):
         creationDate=ctime()
         )
 
-    ctx['remote_rw'] = RemoteReadWriter(ctx['nsqd_tcp_addresses'],
-                                        ctx['lookupd_http_addresses'],
+    ctx['remote_rw'] = RemoteReadWriter(ctx['nsqd_tcp_address'],
+                                        ctx['lookupd_http_address'],
                                         ctx['hostname'])
 
     return ctx
