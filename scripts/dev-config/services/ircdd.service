@@ -7,5 +7,6 @@ Requires=docker.service
 TimeoutStartSec=5
 ExecStartPre=-/usr/bin/docker kill ircdd-%m
 ExecStartPre=-/usr/bin/docker rm ircdd-%m
+ExecStartPre=/usr/bin/docker build -t ircdd-dev /home/core/ircdd/scripts/dev-config
 ExecStart=/usr/bin/docker run -v /home/core/ircdd:/data -p 2375:2375 --name ircdd-%m ircdd-dev bash -c "python setup.py install && twistd -n ircdd -p 2375"
 ExecStop=/usr/bin/docker stop ircdd-%m
