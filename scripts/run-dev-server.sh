@@ -2,9 +2,13 @@
 
 cd `dirname $0`/dev-config
 vagrant rsync
-vagrant ssh -c "fleetctl stop ircdd.service"
-vagrant ssh -c "fleetctl destroy ircdd.service"
-vagrant ssh -c "fleetctl start ircdd/scripts/dev-config/services/ircdd.service"
+# Enable server
+vagrant ssh -c "fleetctl stop ircdd@.service"
+vagrant ssh -c "fleetctl destroy ircdd@.service"
+vagrant ssh -c "fleetctl stop ircdd@server.service"
+vagrant ssh -c "fleetctl destroy ircdd@server.service"
+vagrant ssh -c "fleetctl submit ircdd/scripts/dev-config/services/ircdd@.service"
+vagrant ssh -c "fleetctl start ircdd/scripts/dev-config/services/ircdd@server.service"
 # Enable database
 vagrant ssh -c "fleetctl stop rethinkdb@.service"
 vagrant ssh -c "fleetctl destroy rethinkdb@.service"
