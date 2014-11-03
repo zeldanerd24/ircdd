@@ -5,7 +5,7 @@ from twisted import copyright
 from twisted.cred import portal
 from twisted.words import service
 
-from ircdd import server
+from ircdd import cred
 from ircdd.remote import RemoteReadWriter
 from ircdd import database
 
@@ -16,6 +16,8 @@ class ConfigStore(dict):
     """
     data = {'hostname': 'localhost',
             'port': '5799',
+            'rdb_port': '28015',
+            'rdb_hostname': 'localhost',
             'nsqd_tcp_addresses': ['127.0.0.1:4150'],
             'lookupd_http_addresses': ['127.0.0.1:4161'],
             }
@@ -59,11 +61,10 @@ def makeContext(config):
     # TODO: Make a custom realm that integrates with the database?
     ctx['realm'] = service.InMemoryWordsRealm(ctx['hostname'])
 
-    # TODO: Make a custom checker & portal that integrate with the database?
-    mock_db = server.DatabaseCredentialsChecker()
-    ctx['portal'] = portal.Portal(ctx['realm'], [mock_db])
+    cred_checker = cred.DatabaseCredentialsChecker(ctx)
+    ctx['portal'] = portal.Portal(ctx['realm'], [cred_checker])
 
-    db = database.IRCDDatabase()
+    db = database.IRCDDatabase(ctx['rdb_hostname'],  ctx['rdb_port'])
     db.initializeDB()
     db.addUser('kzvezdarov', 'kzvezdarov@gmail.com', 'password', True, '')
     db.addUser('mcginnisdan', 'mcginnis.dan@gmail.com', 'password', True, '')
@@ -72,9 +73,6 @@ def makeContext(config):
     db.addUser('kevinrothenberger', 'tud14472@temple.edu',
                'password', True, '')
     db.addChannel('#ircdd', 'kzvezdarov', 'private')
-    channels = db.getChannelNames()
-    for channel in channels:
-        ctx['realm'].addGroup(service.Group(channel))
     ctx['server_info'] = dict(
         serviceName=ctx['realm'].name,
         serviceVersion=copyright.version,

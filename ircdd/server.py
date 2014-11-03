@@ -1,10 +1,6 @@
-from zope.interface import implements
 from twisted.words.service import IRCUser
 from twisted.application import internet
 from twisted.internet import protocol
-from twisted.internet import defer
-from twisted.python import failure
-from twisted.cred import checkers, error, credentials
 from twisted.words import service
 from twisted.words.protocols import irc
 from ircdd import database
@@ -14,6 +10,8 @@ class IRCDDUser(IRCUser):
     """
     Contains replacement methods for the twisted protocol default methods.
     """
+
+    ctx = None
 
     # Updated join channel method to allow creating channels that don't exist
     # Replaces a twisted function with same name in service.IRCUser
@@ -44,9 +42,11 @@ class IRCDDUser(IRCUser):
             return self.avatar.join(group).addCallback(cbJoin)
 
         def ebGroup(err):
+            db = database.IRCDDatabase(self.ctx['rdb_hostname'],
+                                       self.ctx['rdb_port'])
             # if channel is not found, then add it and call this function again
-            db = database.IRCDDatabase()
-            db.addChannel(groupName, '', 'public')
+            if db.getChannel(groupName) is None:
+                db.addChannel(groupName, '', 'public')
             self.realm.addGroup(service.Group(groupName))
             self.irc_JOIN(prefix, params)
             return
@@ -94,16 +94,16 @@ class IRCDDFactory(protocol.ServerFactory):
     Server factory which creates instances of the modified
     IRC protocol.
     """
-    protocol = IRCDDUser
 
     def __init__(self, ctx):
         # This is to support the stock IRCUser.
         # For other components, use ctx instead
+        self.ctx = ctx
         self.realm = ctx['realm']
         self.portal = ctx['portal']
         self._serverInfo = ctx['server_info']
 
-        self.ctx = ctx
+    protocol = IRCDDUser
 
 
 def makeServer(ctx):
@@ -114,45 +114,7 @@ def makeServer(ctx):
         requests via the IRCDDFactory
     """
     f = IRCDDFactory(ctx)
+    IRCDDUser.ctx = ctx
 
     irc_server = internet.TCPServer(int(ctx['port']), f)
     return irc_server
-
-
-# In memory storage and checking of nicknames/passwords
-# If user name is not found, it adds the user to the database as unregistered
-class DatabaseCredentialsChecker:
-    """
-    An extremely simple database credentials checker.
-    """
-
-    implements(checkers.ICredentialsChecker)
-
-    credentialInterfaces = (credentials.IUsernamePassword,
-                            credentials.IUsernameHashedPassword)
-
-    db = database.IRCDDatabase()
-
-    def addUser(self, username):
-        self.db.addUser(username, '', '', False, '')
-
-    def _cbPasswordMatch(self, matched, username):
-        if matched:
-            return username
-        else:
-            return failure.Failure(error.UnauthorizedLogin())
-
-    def requestAvatarId(self, credentials):
-        user = self.db.getUser(credentials.username)
-        if user is not None:
-            if user['registered'] is False:
-                return str(credentials.username)
-            else:
-                return defer.maybeDeferred(
-                    credentials.checkPassword,
-                    user['password']).addCallback(
-                    self._cbPasswordMatch, str(credentials.username))
-        else:
-            # this may need to be changed if we use encrypted credentials
-            self.addUser(credentials.username)
-            return self.requestAvatarId(credentials)

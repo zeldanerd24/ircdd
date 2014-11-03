@@ -1,6 +1,7 @@
 import rethinkdb as r
 from rethinkdb.errors import RqlRuntimeError, RqlDriverError
-import os
+from twisted.python import failure, log
+from twisted.internet import defer
 
 
 class IRCDDatabase:
@@ -10,11 +11,14 @@ class IRCDDatabase:
     in order to use it
     """
 
-    RDB_HOST = os.environ.get('RDB_HOST') or 'localhost'
-    RDB_PORT = os.environ.get('RDB_PORT') or 28015
-    DB_NAME = 'ircdd'
     USER_TABLE = 'users'
     CHANNEL_TABLE = 'channels'
+    error = None
+
+    def __init__(self, host, port, db_name='ircdd'):
+        self.RDB_HOST = host
+        self.RDB_PORT = port
+        self.db_name = db_name
 
     def initializeDB(self):
         """
@@ -23,13 +27,23 @@ class IRCDDatabase:
 
         connection = r.connect(host=self.RDB_HOST, port=self.RDB_PORT)
         try:
-            r.db_create(self.DB_NAME).run(connection)
-            r.db(self.DB_NAME).table_create(self.USER_TABLE).run(connection)
-            r.db(self.DB_NAME).table_create(self.CHANNEL_TABLE).run(connection)
-        except RqlRuntimeError:
+            log.msg("Initializing the database")
+            r.db_create(self.db_name).run(connection)
+            r.db(self.db_name).table_create(self.USER_TABLE).run(connection)
+            r.db(self.db_name).table_create(self.CHANNEL_TABLE).run(connection)
+        except RqlRuntimeError, e:
+            # this error occurs if the database is already initialized
+            # not sure if any meaningful failures can also cause this exception
+            log.msg(e)
             pass
+        except Exception, e:
+            #if a completely unexpected error comes up, cause a failure
+            log.msg(e)
+            self.error = defer.fail(failure.Failure(e))
         finally:
             connection.close()
+            if self.error is not None:
+                return self.error
 
     def dropDB(self):
         """
@@ -37,20 +51,24 @@ class IRCDDatabase:
         """
 
         connection = r.connect(host=self.RDB_HOST, port=self.RDB_PORT)
-        r.db_drop(self.DB_NAME).run(connection)
+        try:
+            r.db_drop(self.db_name).run(connection)
+        except RqlRuntimeError, e:
+            log.msg(e)
+            pass
 
     def addUser(self, nickname, email, password, registered, permissions):
         """
         Add a user to the user table
         User table has the following fields:
         nickname (string), email (string), password (string),
-        registered (boolean), permissions (list of dicts, each element
+        registered (boolean), permissions (dict of channel name: permissions
         contains channel name (string) and permissions (string))
         """
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST, port=self.RDB_PORT,
-                                 db=self.DB_NAME)
+                                 db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -66,21 +84,25 @@ class IRCDDatabase:
                  'password': password, 'registered': registered,
                  'permissions': permissions}
             ).run(rdb_conn)
+        else:
+            log.msg("Tried to add already existing user: %s" % nickname)
 
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
 
     def getUser(self, nickname):
         """
         Finds the user with given nickname and returns the dict for it
+        Returns None if the user is not found
         """
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST,
                                  port=self.RDB_PORT,
-                                 db=self.DB_NAME)
+                                 db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -92,7 +114,8 @@ class IRCDDatabase:
 
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return rv
 
@@ -105,7 +128,7 @@ class IRCDDatabase:
         try:
             rdb_conn = r.connect(host=self.RDB_HOST,
                                  port=self.RDB_PORT,
-                                 db=self.DB_NAME)
+                                 db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -116,7 +139,8 @@ class IRCDDatabase:
                                           .run(rdb_conn)
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return result
 
@@ -127,7 +151,7 @@ class IRCDDatabase:
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST, port=self.RDB_PORT,
-                                 db=self.DB_NAME)
+                                 db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -135,7 +159,8 @@ class IRCDDatabase:
             r.row['nickname'] == nickname).delete().run(rdb_conn)
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return result
 
@@ -147,36 +172,28 @@ class IRCDDatabase:
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT, db=self.DB_NAME)
+                                 port=self.RDB_PORT, db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
         cursor = r.table(self.USER_TABLE).filter(
             r.row['nickname'] == nickname).run(rdb_conn)
         user = None
-        isFound = False
         result = None
         for document in cursor:
             user = document
         if user is not None:
             oldPermissions = user['permissions']
-            if type(oldPermissions) is not list:
-                oldPermissions = []
-                oldPermissions.append({channel: permission})
-            else:
-                for i in oldPermissions:
-                    if channel in i:
-                        i[channel] = permission
-                        isFound = True
-                        break
-                if isFound is False:
-                    oldPermissions.append({channel: permission})
+            if type(oldPermissions) is not dict:
+                oldPermissions = {}
+            oldPermissions[channel] = permission
             result = r.table(self.USER_TABLE).filter(
                 r.row['nickname'] == nickname) \
                 .update({'permissions': oldPermissions}).run(rdb_conn)
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return result
 
@@ -194,7 +211,7 @@ class IRCDDatabase:
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT, db=self.DB_NAME)
+                                 port=self.RDB_PORT, db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -212,7 +229,8 @@ class IRCDDatabase:
                                        .run(rdb_conn)
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
 
     def getChannel(self, name):
@@ -223,7 +241,7 @@ class IRCDDatabase:
         try:
             rdb_conn = r.connect(host=self.RDB_HOST,
                                  port=self.RDB_PORT,
-                                 db=self.DB_NAME)
+                                 db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -235,21 +253,20 @@ class IRCDDatabase:
 
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return rv
 
     def getChannelNames(self):
         """
         Returns an array of all channel names present in the database
-        Used to load the channels into the realm's group list upon
-        initial loading
         """
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST,
                                  port=self.RDB_PORT,
-                                 db=self.DB_NAME)
+                                 db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -260,7 +277,8 @@ class IRCDDatabase:
 
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return rv
 
@@ -271,7 +289,7 @@ class IRCDDatabase:
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST, port=self.RDB_PORT,
-                                 db=self.DB_NAME)
+                                 db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -279,7 +297,8 @@ class IRCDDatabase:
             r.row['name'] == name).delete().run(rdb_conn)
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return result
 
@@ -290,7 +309,7 @@ class IRCDDatabase:
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT, db=self.DB_NAME)
+                                 port=self.RDB_PORT, db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -308,7 +327,8 @@ class IRCDDatabase:
                 .update({'topic': newTopic}).run(rdb_conn)
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return result
 
@@ -320,7 +340,7 @@ class IRCDDatabase:
 
         try:
             rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT, db=self.DB_NAME)
+                                 port=self.RDB_PORT, db=self.db_name)
         except RqlDriverError:
             raise Exception("No database connection could be established.")
 
@@ -342,6 +362,7 @@ class IRCDDatabase:
                 .update({'messages': oldMessages}).run(rdb_conn)
         try:
             rdb_conn.close()
-        except AttributeError:
+        except AttributeError, e:
+            log.msg(e)
             pass
         return result
