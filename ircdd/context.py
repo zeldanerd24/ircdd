@@ -4,17 +4,10 @@ import yaml
 from twisted import copyright
 from twisted.cred import portal
 
-from ircdd import server
 from ircdd.server import ShardedRealm
+from ircdd import cred
 from ircdd.remote import RemoteReadWriter
-
-userdata = dict(
-    kzvezdarov='password',
-    mcginnisdan='password',
-    roman215='password',
-    mikeharrison='password',
-    kevinrothenberger='password'
-    )
+from ircdd import database
 
 
 class ConfigStore(dict):
@@ -56,15 +49,19 @@ def makeContext(config):
     for x in config:
         ctx[x] = config.get(x)
 
-    # TODO: Initialize DB driver
-    # ctx['rethinkdb'] =
-
     ctx['realm'] = ShardedRealm(ctx, ctx['hostname'])
 
-    # TODO: Make a custom checker & portal that integrate with the database?
-    mock_db = server.InMemoryUsernamePasswordDatabaseDontUse(**userdata)
-    ctx['portal'] = portal.Portal(ctx['realm'], [mock_db])
+    cred_checker = cred.DatabaseCredentialsChecker(ctx)
+    ctx['portal'] = portal.Portal(ctx['realm'], [cred_checker])
 
+    db = database.IRCDDatabase(ctx['rdb_hostname'],  ctx['rdb_port'])
+    db.initializeDB()
+    db.addUser('kzvezdarov', 'kzvezdarov@gmail.com', 'password', True, '')
+    db.addUser('mcginnisdan', 'mcginnis.dan@gmail.com', 'password', True, '')
+    db.addUser('roman215', 'Roman215@comcast.net', 'password', True, '')
+    db.addUser('mikeharrison', 'tud04305@temple.edu', 'password', True, '')
+    db.addUser('kevinrothenberger', 'tud14472@temple.edu',
+               'password', True, '')
     ctx['server_info'] = dict(
         serviceName=ctx['realm'].name,
         serviceVersion=copyright.version,
