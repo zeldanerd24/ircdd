@@ -4,7 +4,6 @@ import yaml
 from twisted import copyright
 from twisted.cred import portal
 
-from ircdd import server
 from ircdd.server import ShardedRealm
 from ircdd import cred
 from ircdd.remote import RemoteReadWriter
@@ -15,13 +14,7 @@ class ConfigStore(dict):
     """
     Container for configuration values and shared acces modules.
     """
-    data = {'hostname': 'localhost',
-            'port': '5799',
-            'rdb_port': '28015',
-            'rdb_hostname': 'localhost',
-            'nsqd_tcp_addresses': ['127.0.0.1:4150'],
-            'lookupd_http_addresses': ['127.0.0.1:4161'],
-            }
+    data = {}
 
     def __getitem__(self, key):
         return self.data[key]
@@ -56,9 +49,6 @@ def makeContext(config):
     for x in config:
         ctx[x] = config.get(x)
 
-    # TODO: Initialize DB driver
-    # ctx['rethinkdb'] =
-
     ctx['realm'] = ShardedRealm(ctx, ctx['hostname'])
 
     cred_checker = cred.DatabaseCredentialsChecker(ctx)
@@ -72,7 +62,6 @@ def makeContext(config):
     db.addUser('mikeharrison', 'tud04305@temple.edu', 'password', True, '')
     db.addUser('kevinrothenberger', 'tud14472@temple.edu',
                'password', True, '')
-    db.addChannel('#ircdd', 'kzvezdarov', 'private')
     ctx['server_info'] = dict(
         serviceName=ctx['realm'].name,
         serviceVersion=copyright.version,

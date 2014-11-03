@@ -1,11 +1,9 @@
 from time import time
-from zope.interface import implements
 from twisted.words.service import IRCUser, Group, User, WordsRealm
 from twisted.application import internet
 from twisted.internet import protocol, defer
 from twisted.python import failure, log
 from twisted.words import ewords, iwords
-from ircdd import database
 
 
 class ShardedUser(User):

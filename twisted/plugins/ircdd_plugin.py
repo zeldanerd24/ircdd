@@ -23,6 +23,8 @@ class Options(usage.Options, strcred.AuthOptionMixin):
     optParameters = [
         ["hostname", "h", "127.0.0.1"],
         ["port", "p", 5799],
+        ["rdb_port", "", 28015],
+        ["rdb_hostname", "", "127.0.0.1"],
         ]
 
     optFlags = [["ssl", "S"],

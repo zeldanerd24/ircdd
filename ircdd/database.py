@@ -37,7 +37,7 @@ class IRCDDatabase:
             log.msg(e)
             pass
         except Exception, e:
-            #if a completely unexpected error comes up, cause a failure
+            # if a completely unexpected error comes up, cause a failure
             log.msg(e)
             self.error = defer.fail(failure.Failure(e))
         finally:
