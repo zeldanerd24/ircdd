@@ -4,8 +4,8 @@ from twisted.words.service import IRCUser, Group, User, WordsRealm
 from twisted.application import internet
 from twisted.internet import protocol, defer
 from twisted.python import failure, log
-from twisted.cred import checkers, error, credentials
 from twisted.words import ewords, iwords
+from ircdd import database
 
 
 class ShardedUser(User):
@@ -198,6 +198,17 @@ class ShardedRealm(WordsRealm):
 
     def createGroup(self, name):
         # TODO: Integrate database.
+        """
+        def ebGroup(err):
+            db = database.IRCDDatabase(self.ctx['rdb_hostname'],
+                                       self.ctx['rdb_port'])
+            # if channel is not found, then add it and call this function again
+            if db.getChannel(groupName) is None:
+                db.addChannel(groupName, '', 'public')
+            self.realm.addGroup(service.Group(groupName))
+            self.irc_JOIN(prefix, params)
+            return
+        """
         assert isinstance(name, unicode)
 
         def cbLookup(group):
@@ -274,16 +285,16 @@ class IRCDDFactory(protocol.ServerFactory):
     :param ctx: A :class:`ircdd.context.ConfigStore` object which contains both
     the raw config values and the initialized shared drivers.
     """
-    protocol = IRCDDUser
 
     def __init__(self, ctx):
         # This is to support the stock IRCUser.
         # For other components, use ctx instead
+        self.ctx = ctx
         self.realm = ctx['realm']
         self.portal = ctx['portal']
         self._serverInfo = ctx['server_info']
 
-        self.ctx = ctx
+    protocol = IRCDDUser
 
 
 def makeServer(ctx):
@@ -299,49 +310,7 @@ def makeServer(ctx):
 
     """
     f = IRCDDFactory(ctx)
+    IRCDDUser.ctx = ctx
 
     irc_server = internet.TCPServer(int(ctx['port']), f)
     return irc_server
-
-
-# In memory storage and checking of nicknames/passwords
-# If user name is not found, it adds the user to the list
-class InMemoryUsernamePasswordDatabaseDontUse:
-    """
-    An extremely simple credentials checker.
-
-    This is only of use in one-off test programs or examples which don't
-    want to focus too much on how credentials are verified.
-
-    You really don't want to use this for anything else.  It is, at best, a
-    toy.  If you need a simple credentials checker for a real application,
-    see L{FilePasswordDB}.
-    """
-
-    implements(checkers.ICredentialsChecker)
-
-    credentialInterfaces = (credentials.IUsernamePassword,
-                            credentials.IUsernameHashedPassword)
-
-    def __init__(self, **users):
-        self.users = users
-
-    def addUser(self, username, password):
-        self.users[username] = password
-
-    def _cbPasswordMatch(self, matched, username):
-        if matched:
-            return username
-        else:
-            return failure.Failure(error.UnauthorizedLogin())
-
-    def requestAvatarId(self, credentials):
-        if credentials.username in self.users:
-            return defer.maybeDeferred(
-                credentials.checkPassword,
-                self.users[credentials.username]).addCallback(
-                self._cbPasswordMatch, str(credentials.username))
-        else:
-            # this may need to be changed if we use encrypted credentials
-            self.users[credentials.username] = credentials.password
-            return self.requestAvatarId(credentials)
