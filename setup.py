@@ -1,7 +1,7 @@
 #! /usr/bin/env python2.7
 try:
     from setuptools import setup, find_packages
-except ImportError, e:
+except ImportError as e:
     import ez_setup
     ez_setup.use_setuptools()
 finally:
@@ -12,7 +12,8 @@ setup(name="ircdd",
       description="Distributed IRC Daemon",
       url="github.com/kzvezdarov/ircdd",
       license="GPL v3.0 or later",
-      install_requires=["twisted", "pyyaml", "pynsq", "tornado", "requests", "rethinkdb"],
+      install_requires=["twisted", "pyyaml", "pynsq", "tornado", "requests",
+                        "rethinkdb"],
       setup_requires=["flake8", "nose", "mock", "responses"],
       packages=find_packages(),
       scripts=["bin/ircdd.sh", ],

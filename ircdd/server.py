@@ -1,3 +1,4 @@
+from time import time
 from zope.interface import implements
 from twisted.words.service import IRCUser, Group, User, WordsRealm
 from twisted.application import internet
@@ -34,16 +35,13 @@ class ShardedUser(User):
         :param recipient: the IRCUser/Group to send to.
         :param message: the message to send.
         """
-        if isinstance(recipient, IRCUser):
-            recipient_name = recipient.nickname
-        else:
-            recipient_name = recipient.name
 
         message["sender"] = dict(name=self.name, hostname=self.ctx["hostname"])
-        message["recipient"] = recipient_name
+        message["recipient"] = recipient.name
 
-        self.ctx["remote_rw"].publish(recipient_name, message)
-        super(ShardedUser, self).send(recipient, message)
+        self.ctx["remote_rw"].publish(recipient.name, message)
+        self.lastMessage = time()
+        return recipient.receive(self.name, recipient, message)
 
     def receiveRemote(self, message):
         """
@@ -55,7 +53,7 @@ class ShardedUser(User):
         """
         parsed_msg = message.parsed_msg
 
-        self.mind.receive(parsed_msg["msg_body"]["sender"],
+        self.mind.receive(parsed_msg["msg_body"]["sender"]["name"],
                           self, parsed_msg["msg_body"])
 
         message.finish()
@@ -81,10 +79,23 @@ class ShardedGroup(Group):
         the IRC message and metadata in its parsed_body.
         """
         parsed_msg = message.parsed_msg
-        super(ShardedGroup, self).receive(parsed_msg["msg_body"]["sender"],
-                                          self,
-                                          parsed_msg.get("msg_body", None))
+        self.receive(parsed_msg["msg_body"]["sender"],
+                     self,
+                     parsed_msg.get("msg_body", None))
         message.finish()
+
+    def receive(self, sender_name, recipient, message):
+        assert recipient is self
+        recipients = []
+
+        for recipient in self.users.itervalues():
+            if recipient.name != sender_name:
+                d = defer.maybeDeferred(recipient.receive, sender_name,
+                                        self.name, message)
+                d.addErrback(self._ebUserCall, p=recipient)
+                recipients.append(d)
+        defer.DeferredList(recipients).addCallback(self._cbUserCall)
+        return defer.succeed(None)
 
 
 class ShardedRealm(WordsRealm):
@@ -227,7 +238,7 @@ class ShardedRealm(WordsRealm):
 
 
 class IRCDDUser(IRCUser):
-    def receive(self, sender, recipient, message):
+    def receive(self, sender_name, recipient, message):
         """
         Receives a message from the sender for the given recipient.
 
@@ -240,12 +251,6 @@ class IRCDDUser(IRCUser):
         # This is an ugly hack and needs to be fixed. Maybe
         # defining some serializable "shell" IRCUser that can
         # be passed around with the NSQ messages?
-        if isinstance(sender, dict):
-            sender_name = sender.get("name", None)
-        else:
-            sender_name = sender.name
-
-        hostname = self.hostname
 
         if iwords.IGroup.providedBy(recipient):
             recipient_name = "#" + recipient.name
@@ -255,7 +260,9 @@ class IRCDDUser(IRCUser):
         text = message.get("text", "<an unrepresentable message>")
 
         for L in text.splitlines():
-            self.privmsg("%s!%s@%s" % (sender_name, sender_name, hostname),
+            self.privmsg("%s!%s@%s" % (sender_name,
+                                       sender_name,
+                                       self.hostname),
                          recipient_name, L)
 
 
