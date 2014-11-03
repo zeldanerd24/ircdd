@@ -1,6 +1,7 @@
 import nsq
 import json
 import requests
+from requests.exceptions import ConnectionError, Timeout
 from twisted.python import log
 
 
@@ -20,11 +21,14 @@ def _create_topic(topic, lookupd_http_addresses):
         endpoint = "http://%s/create_topic" % addr
         params = {"topic": topic}
 
-        response = requests.get(endpoint, params=params)
-
-        if response.status_code != requests.codes.ok:
-            log.err("Failed to create topic %s on %s: %s" %
-                    (topic, endpoint, str(response)))
+        try:
+            response = requests.get(endpoint, params=params, timeout=5)
+        except (ConnectionError, Timeout) as e:
+            log.err("Error making request to NSQLookupd: %s" % str(e))
+        else:
+            if response.status_code != requests.codes.ok:
+                log.err("Failed to create topic %s on %s: %s" %
+                        (topic, endpoint, str(response)))
 
 
 def _create_channel(topic, chan, lookupd_http_addresses):
@@ -47,11 +51,14 @@ def _create_channel(topic, chan, lookupd_http_addresses):
         endpoint = "http://%s/create_channel" % addr
         params = {"topic": topic, "channel": chan}
 
-        response = requests.get(endpoint, params=params)
-
-        if response.status_code != requests.codes.ok:
-            log.err("Failed to create channel %s for topic %s on %s: %s" %
-                    (chan, topic, endpoint, str(response)))
+        try:
+            response = requests.get(endpoint, params=params)
+        except (ConnectionError, Timeout) as e:
+            log.err("Error making request to NSQLookupd: %s" % str(e))
+        else:
+            if response.status_code != requests.codes.ok:
+                log.err("Failed to create channel %s for topic %s on %s: %s" %
+                        (chan, topic, endpoint, str(response)))
 
 
 class RemoteReadWriter(object):
