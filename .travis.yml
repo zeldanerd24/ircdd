@@ -4,9 +4,13 @@ python:
 
 # install dependencies
 install:
+    - sudo add-apt-repository ppa:rethinkdb/ppa -y
+    - sudo apt-get update -q
+    - sudo apt-get install rethinkdb --force-yes
     - sudo python setup.py install
 
 # run the tests
 script: 
+    - sudo rethinkdb --daemon
     - sudo python setup.py flake8
     - sudo python setup.py nosetests
