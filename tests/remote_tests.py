@@ -1,4 +1,5 @@
 import mock
+import responses
 from ircdd.remote import RemoteReadWriter
 from nose.tools import assert_raises
 
@@ -8,6 +9,7 @@ class TestRemoteReadWriter:
     @mock.patch("nsq.Writer")
     @mock.patch("nsq.Reader")
     @mock.patch("tornado.ioloop.IOLoop")
+    @responses.activate
     def testSubscribes(self, mock_writer, mock_reader, mock_ioloop):
         server_name = "testserver"
         nsqd_addr = ["testserver:4533"]
@@ -18,6 +20,11 @@ class TestRemoteReadWriter:
         topic = "testopic"
         callback = "callback"
 
+        responses.add(responses.GET, "http://testserver:5566/create_topic",
+                      status=200)
+        responses.add(responses.GET, "http://testserver:5566/create_channel",
+                      status=200)
+
         rw.subscribe(topic, callback)
 
         assert rw._readers.get(topic, False)
@@ -25,6 +32,7 @@ class TestRemoteReadWriter:
     @mock.patch("nsq.Writer")
     @mock.patch("nsq.Reader")
     @mock.patch("tornado.ioloop.IOLoop")
+    @responses.activate
     def testUnsubscribes(self, mock_writer, mock_reader, mock_ioloop):
         server_name = "testserver"
         nsqd_addr = ["testserver:4533"]
@@ -34,6 +42,11 @@ class TestRemoteReadWriter:
 
         topic = "testopic"
         callback = "callback"
+
+        responses.add(responses.GET, "http://testserver:5566/create_topic",
+                      status=200)
+        responses.add(responses.GET, "http://testserver:5566/create_channel",
+                      status=200)
 
         rw.subscribe(topic, callback)
 
