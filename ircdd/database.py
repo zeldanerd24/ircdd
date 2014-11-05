@@ -30,12 +30,12 @@ class IRCDDatabase:
         contains channel name (string) and permissions (string))
         """
 
-        exists = r.db(self.db).table(self.USERS_TABLE).get(
+        exists = r.table(self.USERS_TABLE).get(
             nickname
             ).run(self.conn)
 
         if not exists:
-            r.db(self.db).table(self.USERS_TABLE).insert({
+            r.table(self.USERS_TABLE).insert({
                 "id": nickname,
                 "nickname": nickname,
                 "email": email,
@@ -51,7 +51,7 @@ class IRCDDatabase:
         Finds the user with given nickname and returns the dict for it
         Returns None if the user is not found
         """
-        return r.db(self.db).table(self.USERS_TABLE).get(
+        return r.table(self.USERS_TABLE).get(
             nickname
             ).run(self.conn)
 
@@ -63,7 +63,7 @@ class IRCDDatabase:
         assert email
         assert password
 
-        result = r.db(self.db).table(self.USERS_TABLE).filter({
+        result = r.table(self.USERS_TABLE).filter({
             "nickname": nickname
             }).update({
                 "email": email,
@@ -77,7 +77,7 @@ class IRCDDatabase:
         Find and delete the user given by nickname
         """
 
-        return r.db(self.db).table(self.USERS_TABLE).get(
+        return r.table(self.USERS_TABLE).get(
             nickname
             ).delete().run(self.conn)
 
@@ -86,14 +86,14 @@ class IRCDDatabase:
         Set permission for user for the given channel to the permissions string
         defined by permission
         """
-        current_permissions = r.db(self.db).table(self.USERS_TABLE).get(
+        current_permissions = r.table(self.USERS_TABLE).get(
             nickname
             ).pluck("permissions").run(self.conn)
 
         permissions_for_channel = current_permissions.get(channel, [])
         permissions_for_channel.append(permission)
 
-        return r.db(self.db).table(self.USERS_TABLE).get(
+        return r.table(self.USERS_TABLE).get(
             nickname
             ).update({
                 "permissions": r.row["permissions"].merge({
@@ -116,12 +116,12 @@ class IRCDDatabase:
         assert owner
         assert channelType
 
-        exists = r.db(self.db).table(self.GROUPS_TABLE).get(
+        exists = r.table(self.GROUPS_TABLE).get(
             name
             ).run(self.conn)
 
         if not exists:
-            r.db(self.db).table(self.GROUPS_TABLE).insert({
+            r.table(self.GROUPS_TABLE).insert({
                 "id": name,
                 "name": name,
                 "owner": owner,
@@ -137,7 +137,7 @@ class IRCDDatabase:
         Return the IRC channel dict for channel with given name
         """
 
-        return r.db(self.db).table(self.GROUPS_TABLE).get(
+        return r.table(self.GROUPS_TABLE).get(
             name
             ).run(self.conn)
 
@@ -153,7 +153,7 @@ class IRCDDatabase:
         Delete the IRC channel with the given channel name
         """
 
-        return r.db(self.db).table(self.GROUPS_TABLE).get(
+        return r.table(self.GROUPS_TABLE).get(
             name
             ).delete().run(self.conn)
 
@@ -162,7 +162,7 @@ class IRCDDatabase:
         Set the IRC channel's topic
         """
 
-        r.db(self.db).table(self.GROUPS_TABLE).get(name).update({
+        r.table(self.GROUPS_TABLE).get(name).update({
             "topic": {
                 "topic": topic,
                 "topic_time": topic_time,
@@ -176,7 +176,7 @@ class IRCDDatabase:
         nickname and store the message time and contents
         """
 
-        r.db(self.db).table(self.GROUPS_TABLE).get(name).update({
+        r.table(self.GROUPS_TABLE).get(name).update({
             "messages": r.row["messages"].append({
                 "sender": sender,
                 "time": time,

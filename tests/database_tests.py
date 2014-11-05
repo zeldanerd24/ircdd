@@ -10,20 +10,20 @@ GROUPS_TABLE = "groups"
 
 
 def setUp():
-    conn = r.connect(host=HOST, port=PORT)
+    conn = r.connect(db=DB, host=HOST, port=PORT)
     r.db_create(DB).run(conn)
     conn.close()
 
 
 def tearDown():
-    conn = r.connect(host=HOST, port=PORT)
+    conn = r.connect(db=DB, host=HOST, port=PORT)
     r.db_drop(DB).run(conn)
     conn.close()
 
 
 class TestIRCDDatabase():
     def setUp(self):
-        conn = r.connect(host=HOST, port=PORT)
+        conn = r.connect(db=DB, host=HOST, port=PORT)
         r.db(DB).table_create("users").run(conn)
         r.db(DB).table_create("groups").run(conn)
         conn.close()
@@ -31,7 +31,7 @@ class TestIRCDDatabase():
         self.db = database.IRCDDatabase(HOST, PORT, DB)
 
     def tearDown(self):
-        conn = r.connect(host=HOST, port=PORT)
+        conn = r.connect(db=DB, host=HOST, port=PORT)
         r.db(DB).table_drop("users").run(conn)
         r.db(DB).table_drop("groups").run(conn)
         conn.close()
