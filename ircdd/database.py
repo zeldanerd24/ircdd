@@ -21,7 +21,7 @@ class IRCDDatabase:
                               port=self.rdb_port)
 
     def createUser(self, nickname,
-                email="", password="", registered=False, permissions={}):
+                   email="", password="", registered=False, permissions={}):
         """
         Add a user to the user table
         User table has the following fields:
@@ -157,7 +157,7 @@ class IRCDDatabase:
             name
             ).delete().run(self.conn)
 
-    def setChannelTopic(self, name, topic, topic_time, author):
+    def setGroupTopic(self, name, topic, topic_time, author):
         """
         Set the IRC channel's topic
         """

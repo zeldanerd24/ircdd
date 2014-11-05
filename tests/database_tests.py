@@ -41,9 +41,9 @@ class TestIRCDDatabase():
 
     def test_createUser(self):
         self.db.createUser('test_user',
-                        email='user@test.dom',
-                        password='password',
-                        registered=True)
+                           email='user@test.dom',
+                           password='password',
+                           registered=True)
         user = self.db.lookupUser('test_user')
         assert user['nickname'] == "test_user"
         assert user['email'] == 'user@test.dom'
