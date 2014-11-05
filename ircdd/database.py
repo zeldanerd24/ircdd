@@ -334,8 +334,8 @@ class IRCDDatabase:
 
     def addMessage(self, nickname, channel_name, msg_time, msg_contents):
         """
-        Add a message to IRC channel denoted by channel_name, written by nickname,
-        and store the message time and contents
+        Add a message to IRC channel denoted by channel_name, written by
+        nickname and store the message time and contents
         """
 
         try:
