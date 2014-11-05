@@ -1,7 +1,5 @@
 import rethinkdb as r
-from rethinkdb.errors import RqlRuntimeError, RqlDriverError
-from twisted.python import failure, log
-from twisted.internet import defer
+from twisted.python import log
 
 
 class IRCDDatabase:
@@ -11,53 +9,19 @@ class IRCDDatabase:
     in order to use it
     """
 
-    USER_TABLE = 'users'
-    CHANNEL_TABLE = 'channels'
-    error = None
+    USERS_TABLE = 'users'
+    GROUPS_TABLE = 'groups'
 
-    def __init__(self, host, port, db_name='ircdd'):
-        self.RDB_HOST = host
-        self.RDB_PORT = port
-        self.db_name = db_name
+    def __init__(self, host, port, db='ircdd'):
+        self.rdb_host = host
+        self.rdb_port = port
+        self.db = db
+        self.conn = r.connect(db=self.db,
+                              host=self.rdb_host,
+                              port=self.rdb_port)
 
-    def initializeDB(self):
-        """
-        Initialize the database if it is not already initialized
-        """
-
-        connection = r.connect(host=self.RDB_HOST, port=self.RDB_PORT)
-        try:
-            log.msg("Initializing the database")
-            r.db_create(self.db_name).run(connection)
-            r.db(self.db_name).table_create(self.USER_TABLE).run(connection)
-            r.db(self.db_name).table_create(self.CHANNEL_TABLE).run(connection)
-        except RqlRuntimeError, e:
-            # this error occurs if the database is already initialized
-            # not sure if any meaningful failures can also cause this exception
-            log.msg(e)
-            pass
-        except Exception, e:
-            # if a completely unexpected error comes up, cause a failure
-            log.msg(e)
-            self.error = defer.fail(failure.Failure(e))
-        finally:
-            connection.close()
-            if self.error is not None:
-                return self.error
-
-    def dropDB(self):
-        """
-        Delete the database if it exists
-        """
-
-        connection = r.connect(host=self.RDB_HOST, port=self.RDB_PORT)
-        try:
-            r.db_drop(self.db_name).run(connection)
-        except RqlRuntimeError, e:
-            log.msg(e)
-            pass
-
-    def createUser(self, nickname, email, password, registered, permissions):
+    def createUser(self, nickname,
+                email="", password="", registered=False, permissions={}):
         """
         Add a user to the user table
         User table has the following fields:
@@ -66,82 +30,46 @@ class IRCDDatabase:
         contains channel name (string) and permissions (string))
         """
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST, port=self.RDB_PORT,
-                                 db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
+        exists = r.db(self.db).table(self.USERS_TABLE).get(
+            nickname
+            ).run(self.conn)
 
-        # check to see if the user already exists and if so don't insert again
-        cursor = r.table(self.USER_TABLE).filter(
-            r.row['nickname'] == nickname).run(rdb_conn)
-        num_duplicates = 0
-        for document in cursor:
-            num_duplicates = num_duplicates + 1
-        if num_duplicates is 0:
-            r.table(self.USER_TABLE).insert(
-                {'nickname': nickname, 'email': email,
-                 'password': password, 'registered': registered,
-                 'permissions': permissions}
-            ).run(rdb_conn)
+        if not exists:
+            r.db(self.db).table(self.USERS_TABLE).insert({
+                "id": nickname,
+                "nickname": nickname,
+                "email": email,
+                "password": password,
+                "registered": registered,
+                "permissions": permissions
+            }).run(self.conn)
         else:
-            log.msg("Tried to add already existing user: %s" % nickname)
-
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
+            log.err("User already exists: %s" % nickname)
 
     def lookupUser(self, nickname):
         """
         Finds the user with given nickname and returns the dict for it
         Returns None if the user is not found
         """
-
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT,
-                                 db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
-
-        cursor = r.table(self.USER_TABLE).filter(
-            r.row['nickname'] == nickname).run(rdb_conn)
-        rv = None
-        for document in cursor:
-            rv = document
-
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
-        return rv
+        return r.db(self.db).table(self.USERS_TABLE).get(
+            nickname
+            ).run(self.conn)
 
     def registerUser(self, nickname, email, password):
         """
         Finds unregistered user with same nickname and registers them with
         the given email, password, and sets registered to True
         """
+        assert email
+        assert password
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT,
-                                 db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
-
-        result = r.table(self.USER_TABLE).filter(
-            r.row['nickname'] == nickname).update({'email': email,
-                                                   'password': password,
-                                                   'registered': True}) \
-                                          .run(rdb_conn)
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
+        result = r.db(self.db).table(self.USERS_TABLE).filter({
+            "nickname": nickname
+            }).update({
+                "email": email,
+                "password": password,
+                "registered": True
+            }).run(self.conn)
         return result
 
     def deleteUser(self, nickname):
@@ -149,53 +77,29 @@ class IRCDDatabase:
         Find and delete the user given by nickname
         """
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST, port=self.RDB_PORT,
-                                 db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
-
-        result = r.table(self.USER_TABLE).filter(
-            r.row['nickname'] == nickname).delete().run(rdb_conn)
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
-        return result
+        return r.db(self.db).table(self.USERS_TABLE).get(
+            nickname
+            ).delete().run(self.conn)
 
     def setPermission(self, nickname, channel, permission):
         """
         Set permission for user for the given channel to the permissions string
         defined by permission
         """
+        current_permissions = r.db(self.db).table(self.USERS_TABLE).get(
+            nickname
+            ).pluck("permissions").run(self.conn)
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT, db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
+        permissions_for_channel = current_permissions.get(channel, [])
+        permissions_for_channel.append(permission)
 
-        cursor = r.table(self.USER_TABLE).filter(
-            r.row['nickname'] == nickname).run(rdb_conn)
-        user = None
-        result = None
-        for document in cursor:
-            user = document
-        if user is not None:
-            oldPermissions = user['permissions']
-            if type(oldPermissions) is not dict:
-                oldPermissions = {}
-            oldPermissions[channel] = permission
-            result = r.table(self.USER_TABLE).filter(
-                r.row['nickname'] == nickname) \
-                .update({'permissions': oldPermissions}).run(rdb_conn)
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
-        return result
+        return r.db(self.db).table(self.USERS_TABLE).get(
+            nickname
+            ).update({
+                "permissions": r.row["permissions"].merge({
+                    channel: permissions_for_channel
+                    })
+            }).run(self.conn)
 
     def createGroup(self, name, owner, channelType):
         """
@@ -208,161 +112,74 @@ class IRCDDatabase:
         messages (array of dicts) each element (message) contains
         message time, message author, and message contents
         """
+        assert name
+        assert owner
+        assert channelType
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT, db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
+        exists = r.db(self.db).table(self.GROUPS_TABLE).get(
+            name
+            ).run(self.conn)
 
-        cursor = r.table(self.CHANNEL_TABLE).filter(
-            r.row['name'] == name).run(rdb_conn)
-        num_duplicates = 0
-        for document in cursor:
-            num_duplicates = num_duplicates + 1
-        if num_duplicates is 0:
-            r.table(self.CHANNEL_TABLE).insert({'name': name,
-                                                'owner': owner,
-                                                'type': channelType,
-                                                'topic': '',
-                                                'messages': ''}) \
-                                       .run(rdb_conn)
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
+        if not exists:
+            r.db(self.db).table(self.GROUPS_TABLE).insert({
+                "id": name,
+                "name": name,
+                "owner": owner,
+                "type": channelType,
+                "topic": {},
+                "messages": []
+            }).run(self.conn)
+        else:
+            log.err("Group already exists: %s" % name)
 
     def lookupGroup(self, name):
         """
         Return the IRC channel dict for channel with given name
         """
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT,
-                                 db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
-
-        cursor = r.table(self.CHANNEL_TABLE).filter(
-            r.row['name'] == name).run(rdb_conn)
-        rv = None
-        for document in cursor:
-            rv = document
-
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
-        return rv
+        return r.db(self.db).table(self.GROUPS_TABLE).get(
+            name
+            ).run(self.conn)
 
     def listGroups(self):
         """
         Returns an array of all IRC channel names present in the database
         """
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT,
-                                 db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
-
-        cursor = r.table(self.CHANNEL_TABLE).run(rdb_conn)
-        rv = []
-        for document in cursor:
-            rv.append(document['name'])
-
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
-        return rv
+        return list(r.table(self.CHANNEL_TABLE).pluck("name").run(self.conn))
 
     def deleteGroup(self, name):
         """
         Delete the IRC channel with the given channel name
         """
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST, port=self.RDB_PORT,
-                                 db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
+        return r.db(self.db).table(self.GROUPS_TABLE).get(
+            name
+            ).delete().run(self.conn)
 
-        result = r.table(self.CHANNEL_TABLE).filter(
-            r.row['name'] == name).delete().run(rdb_conn)
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
-        return result
-
-    def setGroupData(self, channel_name, topic, topic_time, topic_author):
+    def setChannelTopic(self, name, topic, topic_time, author):
         """
         Set the IRC channel's topic
         """
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT, db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
+        r.db(self.db).table(self.GROUPS_TABLE).get(name).update({
+            "topic": {
+                "topic": topic,
+                "topic_time": topic_time,
+                "topic_author": author
+                }
+            }).run(self.conn)
 
-        cursor = r.table(self.CHANNEL_TABLE).filter(
-            r.row['name'] == channel_name).run(rdb_conn)
-        channel = None
-        result = None
-        for document in cursor:
-            channel = document
-        if channel is not None:
-            newTopic = {'topic': topic, 'topic_time': topic_time,
-                        'topic_author': topic_author}
-            result = r.table(self.CHANNEL_TABLE).filter(
-                r.row['name'] == channel_name) \
-                .update({'topic': newTopic}).run(rdb_conn)
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
-        return result
-
-    def addMessage(self, nickname, channel_name, msg_time, msg_contents):
+    def addMessage(self, name, sender, time, text):
         """
         Add a message to IRC channel denoted by channel_name, written by
         nickname and store the message time and contents
         """
 
-        try:
-            rdb_conn = r.connect(host=self.RDB_HOST,
-                                 port=self.RDB_PORT, db=self.db_name)
-        except RqlDriverError:
-            raise Exception("No database connection could be established.")
-
-        cursor = r.table(self.CHANNEL_TABLE).filter(
-            r.row['name'] == channel_name).run(rdb_conn)
-        channel = None
-        result = None
-        for document in cursor:
-            channel = document
-        if channel is not None:
-            oldMessages = channel['messages']
-            if type(oldMessages) is not list:
-                oldMessages = []
-            oldMessages.append({'nickname': nickname,
-                                'time': msg_time,
-                                'contents': msg_contents})
-            result = r.table(self.CHANNEL_TABLE).filter(
-                r.row['name'] == channel_name) \
-                .update({'messages': oldMessages}).run(rdb_conn)
-        try:
-            rdb_conn.close()
-        except AttributeError, e:
-            log.msg(e)
-            pass
-        return result
+        r.db(self.db).table(self.GROUPS_TABLE).get(name).update({
+            "messages": r.row["messages"].append({
+                "sender": sender,
+                "time": time,
+                "text": text
+                })
+            }).run(self.conn)

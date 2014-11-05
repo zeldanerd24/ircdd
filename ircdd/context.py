@@ -54,14 +54,8 @@ def makeContext(config):
     cred_checker = cred.DatabaseCredentialsChecker(ctx)
     ctx['portal'] = portal.Portal(ctx['realm'], [cred_checker])
 
-    db = database.IRCDDatabase(ctx['rdb_hostname'],  ctx['rdb_port'])
-    db.initializeDB()
-    db.addUser('kzvezdarov', 'kzvezdarov@gmail.com', 'password', True, '')
-    db.addUser('mcginnisdan', 'mcginnis.dan@gmail.com', 'password', True, '')
-    db.addUser('roman215', 'Roman215@comcast.net', 'password', True, '')
-    db.addUser('mikeharrison', 'tud04305@temple.edu', 'password', True, '')
-    db.addUser('kevinrothenberger', 'tud14472@temple.edu',
-               'password', True, '')
+    ctx["db"] = database.IRCDDatabase(ctx['rdb_hostname'],  ctx['rdb_port'])
+
     ctx['server_info'] = dict(
         serviceName=ctx['realm'].name,
         serviceVersion=copyright.version,
