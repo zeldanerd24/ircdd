@@ -57,7 +57,7 @@ class IRCDDatabase:
             log.msg(e)
             pass
 
-    def addUser(self, nickname, email, password, registered, permissions):
+    def createUser(self, nickname, email, password, registered, permissions):
         """
         Add a user to the user table
         User table has the following fields:
@@ -93,7 +93,7 @@ class IRCDDatabase:
             log.msg(e)
             pass
 
-    def getUser(self, nickname):
+    def lookupUser(self, nickname):
         """
         Finds the user with given nickname and returns the dict for it
         Returns None if the user is not found
@@ -197,9 +197,9 @@ class IRCDDatabase:
             pass
         return result
 
-    def addChannel(self, name, owner, channelType):
+    def createGroup(self, name, owner, channelType):
         """
-        Create a channel (if it doesn't exist yet) in the channels table
+        Create an IRC channel (if it doesn't exist yet) in the channels table
         Fields for the channels table are:
         name (string) the name of the channel
         owner (string) the owner (by nickname) of the channel
@@ -233,9 +233,9 @@ class IRCDDatabase:
             log.msg(e)
             pass
 
-    def getChannel(self, name):
+    def lookupGroup(self, name):
         """
-        Return the channel dict for channel with given name
+        Return the IRC channel dict for channel with given name
         """
 
         try:
@@ -258,9 +258,9 @@ class IRCDDatabase:
             pass
         return rv
 
-    def getChannelNames(self):
+    def listGroups(self):
         """
-        Returns an array of all channel names present in the database
+        Returns an array of all IRC channel names present in the database
         """
 
         try:
@@ -282,9 +282,9 @@ class IRCDDatabase:
             pass
         return rv
 
-    def deleteChannel(self, name):
+    def deleteGroup(self, name):
         """
-        Delete the channel with the given channel name
+        Delete the IRC channel with the given channel name
         """
 
         try:
@@ -302,9 +302,9 @@ class IRCDDatabase:
             pass
         return result
 
-    def setChannelTopic(self, channel_name, topic, topic_time, topic_author):
+    def setGroupData(self, channel_name, topic, topic_time, topic_author):
         """
-        Set the channel's topic
+        Set the IRC channel's topic
         """
 
         try:
@@ -334,8 +334,8 @@ class IRCDDatabase:
 
     def addMessage(self, nickname, channel_name, msg_time, msg_contents):
         """
-        Add a message to channel denoted by channel_name, written by nickname,
-        and store the message time and contents
+        Add a message to IRC channel denoted by channel_name, written by
+        nickname and store the message time and contents
         """
 
         try:
