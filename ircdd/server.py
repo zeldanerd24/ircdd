@@ -196,17 +196,6 @@ class ShardedRealm(WordsRealm):
 
     def createGroup(self, name):
         # TODO: Integrate database.
-        """
-        def ebGroup(err):
-            db = database.IRCDDatabase(self.ctx['rdb_hostname'],
-                                       self.ctx['rdb_port'])
-            # if channel is not found, then add it and call this function again
-            if db.getChannel(groupName) is None:
-                db.addChannel(groupName, '', 'public')
-            self.realm.addGroup(service.Group(groupName))
-            self.irc_JOIN(prefix, params)
-            return
-        """
         assert isinstance(name, unicode)
 
         def cbLookup(group):
