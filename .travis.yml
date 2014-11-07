@@ -4,14 +4,22 @@ python:
 
 # install dependencies
 install:
+    # install rethinkdb
     - source /etc/lsb-release && echo "deb http://download.rethinkdb.com/apt $DISTRIB_CODENAME main" | sudo tee /etc/apt/sources.list.d/rethinkdb.list 
     - wget -qO- http://download.rethinkdb.com/apt/pubkey.gpg | sudo apt-key add -
     - sudo apt-get update -q
     - sudo apt-get install rethinkdb --force-yes
+    # install NSQ
+    - sudo wget "https://s3.amazonaws.com/bitly-downloads/nsq/nsq-0.2.31.linux-amd64.go1.3.1.tar.gz"
+    - sudo tar -xf nsq-0.2.31.linux-amd64.go1.3.1.tar.gz
+    - sudo cp nsq-0.2.31.linux-amd64.go1.3.1/bin/* /bin
+    # install app
     - sudo python setup.py install
 
 # run the tests
 script: 
     - sudo rethinkdb --daemon
+    - sudo nsqlookupd&
+    - sudo nsqd --lookupd-tcp-address="127.0.0.1:4160" &
     - sudo python setup.py flake8
     - sudo python setup.py nosetests
