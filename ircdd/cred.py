@@ -1,6 +1,5 @@
 from zope.interface import implements
 from twisted.cred import checkers, error, credentials
-from ircdd import database
 from twisted.python import failure
 from twisted.internet import defer
 
@@ -19,11 +18,9 @@ class DatabaseCredentialsChecker:
 
     def __init__(self, ctx):
         self.ctx = ctx
-        self.db = database.IRCDDatabase(self.ctx['rdb_hostname'],
-                                        self.ctx['rdb_port'])
 
     def addUser(self, username):
-        self.db.addUser(username, '', '', False, '')
+        self.ctx["db"].createUser(username)
 
     def _cbPasswordMatch(self, matched, username):
         if matched:
@@ -32,8 +29,8 @@ class DatabaseCredentialsChecker:
             return failure.Failure(error.UnauthorizedLogin())
 
     def requestAvatarId(self, credentials):
-        user = self.db.getUser(credentials.username)
-        if user is not None:
+        user = self.ctx["db"].lookupUser(credentials.username)
+        if user:
             if user['registered'] is False:
                 return str(credentials.username)
             else:
