@@ -1,39 +1,28 @@
 import rethinkdb as r
 from ircdd import database
 
-DB = "test_ircdd"
-HOST = "127.0.0.1"
-PORT = 28015
-
-USERS_TABLE = "users"
-GROUPS_TABLE = "groups"
-
-
-def setUp():
-    conn = r.connect(db=DB, host=HOST, port=PORT)
-    r.db_create(DB).run(conn)
-    conn.close()
-
-
-def tearDown():
-    conn = r.connect(db=DB, host=HOST, port=PORT)
-    r.db_drop(DB).run(conn)
-    conn.close()
+from ircdd.tests import integration
 
 
 class TestIRCDDatabase():
     def setUp(self):
-        conn = r.connect(db=DB, host=HOST, port=PORT)
-        r.db(DB).table_create("users").run(conn)
-        r.db(DB).table_create("groups").run(conn)
+        conn = r.connect(db=integration.DB,
+                         host=integration.HOST,
+                         port=integration.PORT)
+        r.db(integration.DB).table_create("users").run(conn)
+        r.db(integration.DB).table_create("groups").run(conn)
         conn.close()
 
-        self.db = database.IRCDDatabase(HOST, PORT, DB)
+        self.db = database.IRCDDatabase(integration.DB,
+                                        integration.HOST,
+                                        integration.PORT)
 
     def tearDown(self):
-        conn = r.connect(db=DB, host=HOST, port=PORT)
-        r.db(DB).table_drop("users").run(conn)
-        r.db(DB).table_drop("groups").run(conn)
+        conn = r.connect(db=integration.DB,
+                         host=integration.HOST,
+                         port=integration.PORT)
+        r.db(integration.DB).table_drop("users").run(conn)
+        r.db(integration.DB).table_drop("groups").run(conn)
         conn.close()
 
         self.db.conn.close()

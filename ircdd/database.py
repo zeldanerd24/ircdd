@@ -12,7 +12,7 @@ class IRCDDatabase:
     USERS_TABLE = 'users'
     GROUPS_TABLE = 'groups'
 
-    def __init__(self, host, port, db='ircdd'):
+    def __init__(self, db="ircdd", host="127.0.0.1", port=28015):
         self.rdb_host = host
         self.rdb_port = port
         self.db = db

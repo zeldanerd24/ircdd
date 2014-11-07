@@ -32,6 +32,53 @@ def _create_topic(topic, lookupd_http_addresses):
                         (topic, endpoint, str(response)))
 
 
+def _topics(lookupd_http_addresses):
+    """
+    Utility function which lists the known topics
+    on each of the given lookupd http addresses.
+    :param lookupd_http_adddresses: A list of address
+    strings that point to `NSQLookupd` instances.
+    :type list:
+    """
+    for addr in lookupd_http_addresses:
+        endpoint = "http://%s/topics" % addr
+
+        try:
+            response = requests.get(endpoint, timeout=5)
+        except (ConnectionError, Timeout) as e:
+            log.err("Error making request to NSQLookupd: %s" % str(e))
+        else:
+            if response.status_code != requests.codes.ok:
+                log.err("Failed to list topics on %s: %s" %
+                        (endpoint, str(response)))
+            else:
+                return response.json()["data"]["topics"]
+
+
+def _delete_topic(topic, lookupd_http_addresses):
+    """
+    Utility function which deletes the requested topic
+    on each of the given lookupd http addresses.
+    :param topic: The name of the topic to empty.
+    :type string:
+    :param lookupd_http_adddresses: A list of address
+    strings that point to `NSQLookupd` instances.
+    :type list:
+    """
+    for addr in lookupd_http_addresses:
+        endpoint = "http://%s/delete_topic" % addr
+        params = {"topic": topic}
+
+        try:
+            response = requests.get(endpoint, params=params, timeout=5)
+        except (ConnectionError, Timeout) as e:
+            log.err("Error making request to NSQLookupd: %s" % str(e))
+        else:
+            if response.status_code != requests.codes.ok:
+                log.err("Failed to delete topic %s on %s: %s" %
+                        (topic, endpoint, str(response)))
+
+
 def _create_channel(topic, chan, lookupd_http_addresses):
     """
     Utility function which creates the requested channel
@@ -59,6 +106,62 @@ def _create_channel(topic, chan, lookupd_http_addresses):
         else:
             if response.status_code != requests.codes.ok:
                 log.err("Failed to create channel %s for topic %s on %s: %s" %
+                        (chan, topic, endpoint, str(response)))
+
+
+def _channels(topic, lookupd_http_addresses):
+    """
+    Utility function which lists the channels
+    on the specified topic for each of the given
+    lookupd http addresses.
+    :param topic: The name of the topic on which the channels
+    will be listed.
+    :type string:
+    :param lookupd_http_adddresses: A list of address
+    strings that point to `NSQLookupd` instances.
+    :type list:
+    """
+    for addr in lookupd_http_addresses:
+        endpoint = "http://%s/channels" % addr
+        params = {"topic": topic}
+
+        try:
+            response = requests.get(endpoint, params=params)
+        except (ConnectionError, Timeout) as e:
+            log.err("Error making request to NSQLookupd: %s" % str(e))
+        else:
+            if response.status_code != requests.codes.ok:
+                log.err("Failed to list channels for topic %s on %s: %s" %
+                        (topic, endpoint, str(response)))
+            else:
+                return response.json()["data"]["channels"]
+
+
+def _delete_channel(topic, chan, lookupd_http_addresses):
+    """
+    Utility function which deletes the requested channel
+    on the specified topic for each of the given
+    lookupd http addresses.
+    :param topic: The name of the topic on which the channel
+    will be deleted.
+    :type string:
+    :param chan: The name of the channel to delete.
+    :type string:
+    :param lookupd_http_adddresses: A list of address
+    strings that point to `NSQLookupd` instances.
+    :type list:
+    """
+    for addr in lookupd_http_addresses:
+        endpoint = "http://%s/delete_channel" % addr
+        params = {"topic": topic, "channel": chan}
+
+        try:
+            response = requests.get(endpoint, params=params)
+        except (ConnectionError, Timeout) as e:
+            log.err("Error making request to NSQLookupd: %s" % str(e))
+        else:
+            if response.status_code != requests.codes.ok:
+                log.err("Failed to delete channel %s for topic %s on %s: %s" %
                         (chan, topic, endpoint, str(response)))
 
 
