@@ -1,6 +1,8 @@
 bind=all
 log-file=/var/log/rethinkdb.log
-directory=/data/rethinkdb_data
-{{range getvs "/services/rethinkdb/*"}
+directory=/var/rethinkdb_data
+{{range ls "/services/rethinkdb"}}
+    {{if ne . $cluster_addr}}
 join={{.}}
-{{ end }}
+    {{end}}
+{{end}}

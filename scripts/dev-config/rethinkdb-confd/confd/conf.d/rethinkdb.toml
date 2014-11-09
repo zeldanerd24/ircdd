@@ -5,4 +5,4 @@ dest = "/etc/rethinkdb/rethinkdb.conf"
 
 keys = [ "/services/rethinkdb" ]
 
-reload_cmd="pkill rethinkdb && rethinkdb serve --directory /data/rethinkdb_data --daemon"
+reload_cmd="pkill rethinkdb && rethinkdb serve --config-file /etc/rethinkdb/rethinkdb.conf --daemon"

@@ -14,7 +14,7 @@ EnvironmentFile=/etc/environment
 
 ExecStart=/bin/bash -c '\
     while true; do \
-        curl -f ${COREOS_PRIVATE_IPV4}:4161/ping; \
+        curl -f ${COREOS_PRIVATE_IPV4}:8080; \
         if [ $? -eq 0 ]; then \
             etcdctl set /services/rethinkdb/${COREOS_PRIVATE_IPV4} \'${COREOS_PRIVATE_IPV4}:29015\' --ttl 30; \
         else \
