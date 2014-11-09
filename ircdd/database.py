@@ -187,7 +187,7 @@ class IRCDDatabase:
                 })
             }).run(self.conn)
 
-    def checkIfValidEmail(email):
+    def checkIfValidEmail(self, email):
         """
         Checks if the passed email is valid based on the regex string
         """
@@ -199,7 +199,7 @@ class IRCDDatabase:
             print "Invalid Email Address"
             raise ValueError(email)
 
-    def checkIfValidNickname(nickname):
+    def checkIfValidNickname(self, nickname):
         """
         Checks if the passed nickname is valid based on the regex string
         """
@@ -214,7 +214,7 @@ class IRCDDatabase:
             print "Invalid nickname"
             raise ValueError(nickname)
 
-    def checkIfValidPassword(password):
+    def checkIfValidPassword(self, password):
         """
         Checks if the passed password is valid based on the regex string
         """

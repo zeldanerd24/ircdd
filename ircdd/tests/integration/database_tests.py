@@ -166,4 +166,3 @@ class TestIRCDDatabase():
         password = "goodPassword2"
 
         self.db.checkIfValidPassword(password)
-        
