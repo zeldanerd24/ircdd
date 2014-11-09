@@ -46,7 +46,7 @@ $enable_serial_logging=false
 #   export DOCKER_HOST='tcp://127.0.0.1:2375'
 #$expose_docker_tcp=3375
 $expose_app_tcp=2375
-$expose_rdb_tcp=28015
+$expose_rdb=28015
 $expose_nsqlookupd_http=4161
 
 # Setting for VirtualBox VMs

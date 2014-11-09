@@ -13,11 +13,11 @@ until confd -onetime -node $ETCD -config-file /etc/confd/conf.d/nsqd.toml; do
 done
 
 echo "[nsqd] is now monitoring etcd for changes..."
-touch /var/log/confd.log
+echo "" > /var/log/confd.log
 confd -interval 10 -node $ETCD -config-file /etc/confd/conf.d/nsqd.toml &> /var/log/confd.log &
 
 echo "[nsqd] starting nsqd..."
-touch /var/log/nsqd.log
+echo "" > /var/log/nsqd.log
 nsqd -config=/etc/nsq/nsqd.toml &> /var/log/nsqd.log &
 
 tail -f /var/log/*.log
