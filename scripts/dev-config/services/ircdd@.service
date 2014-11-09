@@ -1,10 +1,15 @@
 [Unit]
 Description=IRCDistributedDaemon
+
 After=docker.service
+
 Requires=docker.service
 
 [Service]
-TimeoutStartSec=5
+TimeoutStartSec=0
+
+EnvironmentalFile=/etc/environment
+
 ExecStartPre=-/usr/bin/docker kill ircdd-%i
 ExecStartPre=-/usr/bin/docker rm ircdd-%i
 ExecStartPre=/usr/bin/docker build -t ircdd-dev /home/core/ircdd/scripts/dev-config

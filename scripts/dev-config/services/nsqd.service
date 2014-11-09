@@ -4,7 +4,10 @@ After=docker.service
 Requires=docker.service
 
 [Service]
-TimeoutStartSec=5
+TimeoutStartSec=0
+
+EnvironmentFile=/etc/environment
+
 ExecStartPre=-/usr/bin/docker kill nsqd
 ExecStartPre=-/usr/bin/docker rm nsqd
 ExecStartPre=/usr/bin/docker pull dockerfile/nsq
