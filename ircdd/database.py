@@ -61,30 +61,10 @@ class IRCDDatabase:
         Finds unregistered user with same nickname and registers them with
         the given email, password, and sets registered to True
         """
-        min_len = 3
-        min_pass_len = 6
-        max_len = 64
-        valid_email = re.compile(
-            r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)")
-        valid_nickname = re.compile(
-            r"^(?i)[a-z0-9_-]{%s,%s}$" % (min_len, max_len))
-        valid_password = re.compile(
-            r"^(?i)[a-z0-9_-]{%s,%s}$" % (min_pass_len, max_len))
 
-        # this is hacky. It's going to just crash the whole system if
-        # something doesn't work. clearly this needs to be replaced
-        # with more graceful error handling before production.
-        if valid_email.match(email) is None:
-            print "Invalid Email Address"
-            raise ValueError(email)
-
-        if valid_nickname.match(nickname) is None:
-            print "Invalid nickname"
-            raise ValueError(nickname)
-
-        if valid_password.match(password) is None:
-            print "Invalid password"
-            raise ValueError(password)
+        self.checkIfValidEmail(email)
+        self.checkIfValidNickname(nickname)
+        self.checkIfValidPassword(password)
 
         result = r.table(self.USERS_TABLE).filter({
             "nickname": nickname
@@ -206,3 +186,45 @@ class IRCDDatabase:
                 "text": text
                 })
             }).run(self.conn)
+
+    def checkIfValidEmail(email):
+        """
+        Checks if the passed email is valid based on the regex string
+        """
+
+        valid_email = re.compile(
+            r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)")
+
+        if valid_email.match(email) is None:
+            print "Invalid Email Address"
+            raise ValueError(email)
+
+    def checkIfValidNickname(nickname):
+        """
+        Checks if the passed nickname is valid based on the regex string
+        """
+
+        min_len = 3
+        max_len = 64
+
+        valid_nickname = re.compile(
+            r"^(?i)[a-z0-9_-]{%s,%s}$" % (min_len, max_len))
+
+        if valid_nickname.match(nickname) is None:
+            print "Invalid nickname"
+            raise ValueError(nickname)
+
+    def checkIfValidPassword(password):
+        """
+        Checks if the passed password is valid based on the regex string
+        """
+
+        min_len = 6
+        max_len = 64
+
+        valid_password = re.compile(
+            r"^(?i)[a-z0-9_-]{%s,%s}$" % (min_len, max_len))
+
+        if valid_password.match(password) is None:
+            print "Invalid password"
+            raise ValueError(password)
