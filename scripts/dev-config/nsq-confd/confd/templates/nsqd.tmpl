@@ -1,4 +1,7 @@
-{{ range $nsqlookupd := .services_nsqlookupd }}
-    lookupd_tcp_address = {{ $nsqlookupd.Value }}
-{{ end }}
+nsqlookupd_tcp_addresses = [ 
+{{range getvs "/services/nsqlookupd/*"}}
+"{{.}}",
+{{end}}
+]
+
 data_path="/data"

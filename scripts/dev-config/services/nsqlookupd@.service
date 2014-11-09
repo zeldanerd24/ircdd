@@ -13,7 +13,7 @@ Before=nsqlookupd-discovery@.service
 [Service]
 TimeoutStartSec=0
 
-EnvironmentalFile=/etc/environment
+EnvironmentFile=/etc/environment
 
 ExecStartPre=-/usr/bin/docker kill nsqlookupd-%i
 ExecStartPre=-/usr/bin/docker rm nsqlookupd-%i

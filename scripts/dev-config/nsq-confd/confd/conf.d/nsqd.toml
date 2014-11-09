@@ -3,8 +3,8 @@ src = "nsqd.tmpl"
 
 dest = "/etc/nsq/nsqd.toml"
 
-keys = [ "/services/nsqlookupd" ]
-owner = "root"
-mode = "0644"
+keys = [ 
+    "/services/nsqlookupd" ,
+]
 
-reload_cmd="nsqd -config=/etc/nsq/nsqd.toml"
+reload_cmd="pkill nsqd && nsqd -config=/etc/nsq/nsqd.toml &> /var/log/nsqd.log &"

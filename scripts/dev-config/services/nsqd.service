@@ -20,6 +20,7 @@ ExecStartPre=/usr/bin/docker build -t nsqd /home/core/ircdd/scripts/dev-config/n
 ExecStart=/usr/bin/docker run \
                           -e HOST_IP=${COREOS_PUBLIC_IPV4} \
                           -p 4150:4150 -p 4151:4151 \
+                          --name nsqd \
                           nsqd \
                           confd-watch-nsqd
 

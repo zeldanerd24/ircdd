@@ -8,7 +8,7 @@ Requires=docker.service
 [Service]
 TimeoutStartSec=0
 
-EnvironmentalFile=/etc/environment
+EnvironmentFile=/etc/environment
 
 ExecStartPre=-/usr/bin/docker kill ircdd-%i
 ExecStartPre=-/usr/bin/docker rm ircdd-%i

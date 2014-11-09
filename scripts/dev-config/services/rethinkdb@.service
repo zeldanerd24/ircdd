@@ -1,14 +1,19 @@
 [Unit]
 Description=RethinkDB
 
-After=docker.service
-
 Requires=docker.service
+Requires=etcd.service
+Requires=rethinkdb-discovery@.service
+
+After=docker.service
+Requires=etcd.service
+
+Before=rethinkdb-discovery@.service
 
 [Service]
 TimeoutStartSec=0
 
-EnvironmentalFile=/etc/environment
+EnvironmentFile=/etc/environment
 
 ExecStartPre=-/usr/bin/docker kill rethinkdb-%i
 ExecStartPre=-/usr/bin/docker rm rethinkdb-%i
