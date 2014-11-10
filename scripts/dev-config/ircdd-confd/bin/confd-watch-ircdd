@@ -10,7 +10,7 @@ export ETCD=$HOST_IP:$ETCD_PORT
 echo "[ircdd] booting container. ETCD: $ETCD"
 
 until confd -onetime -node $ETCD -config-file /etc/confd/conf.d/ircdd.toml; do
-    echo "[ircdd] waiting for confd to create initial ircddconfiguration"
+    echo "[ircdd] waiting for confd to create initial ircdd configuration"
     sleep 5
 done
 
@@ -20,6 +20,6 @@ confd -interval 10 -node $ETCD -config-file /etc/confd/conf.d/ircdd.toml &> /var
 
 echo "[ircdd] starting ircdd"
 echo "" > /var/log/ircdd.log
-twistd --logfile=/var/log/ircdd.log ircdd --config=/etc/ircdd/ircdd.yaml --nsqd_tcp_address=$HOST_IP:$NSQD_PORT --hostname=$INSTANCE_NAME
+twistd --logfile=/var/log/ircdd.log ircdd --config=/etc/ircdd/ircdd.yaml --nsqd-tcp-address=$HOST_IP:$NSQD_PORT --hostname=$INSTANCE_NAME
 
 tail -f /var/log/*.log

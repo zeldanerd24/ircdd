@@ -65,7 +65,6 @@ def makeContext(config):
         creationDate=ctime()
         )
 
-
     ctx['remote_rw'] = RemoteReadWriter(ctx['nsqd_tcp_address'],
                                         ctx['lookupd_http_address'],
                                         ctx['hostname'])

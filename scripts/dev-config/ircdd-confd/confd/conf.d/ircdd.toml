@@ -8,4 +8,4 @@ keys = [
     "/services/nsqlookupd",
 ]
 
-reload_cmd="pkill twistd && twistd --logfile=/var/log/ircdd.log ircdd --config=/etc/ircdd/ircdd.yaml --nsqd_tcp_address=$HOST_IP:$NSQD_PORT --hostname=$INSTANCE_NAME" 
+reload_cmd="pkill twistd && twistd --logfile=/var/log/ircdd.log ircdd --config=/etc/ircdd/ircdd.yaml --nsqd-tcp-address=$HOST_IP:$NSQD_PORT --hostname=$INSTANCE_NAME" 
