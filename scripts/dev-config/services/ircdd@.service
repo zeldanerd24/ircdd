@@ -18,6 +18,10 @@ ExecStartPre=/usr/bin/docker build -t ircdd /home/core/ircdd/scripts/dev-config/
 
 ExecStart=/usr/bin/docker run \
                           -p 5799:5799 \
+                          -e HOST_IP=${COREOS_PUBLIC_IPV4} \
+                          -e ETCD_PORT=4001 \
+                          -e NSQD_PORT=4150 \
+                          -e INSTANCE_NAME=ircdd-%i \
                           --name ircdd-%i \
 ExecStop=/usr/bin/docker stop ircdd-%i
 
