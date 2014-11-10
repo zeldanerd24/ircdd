@@ -4,11 +4,11 @@ set -eo pipefail
 export ETCD_PORT=${ETCD_PORT:-4001}
 export HOST_IP=${HOST_IP:-172.17.42.1}
 export ETCD=$HOST_IP:$ETCD_PORT
-export CLUSTER_ADDR=${CLUSTER_ADDR:-172.17.42.1}
+export LOCAL_NODE=${LOCAL_NODE:-172.17.42.1}
 
 # This hack is necessary since the getenv function is not in confd 0.6.3 (latest stable)
 cp /etc/confd/templates/rethinkdb.tmpl /etc/confd/templates/rethinkdb.tmpl.base
-echo "{{\$cluster_addr := \"$CLUSTER_ADDR\"}}" | cat - /etc/confd/templates/rethinkdb.tmpl.base > /etc/confd/templates/rethinkdb.tmpl
+echo "{{\$local_node := \"$local_node\"}}" | cat - /etc/confd/templates/rethinkdb.tmpl.base > /etc/confd/templates/rethinkdb.tmpl
 
 echo "[rdb] booting container. ETCD: $ETCD"
 
