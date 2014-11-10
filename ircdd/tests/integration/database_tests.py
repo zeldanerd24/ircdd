@@ -166,3 +166,18 @@ class TestIRCDDatabase():
         password = "goodPassword2"
 
         self.db.checkIfValidPassword(password)
+
+    def test_privateMessage(self):
+        sender = "sender"
+        receiver = "receiver"
+        timestamp = "2014-11-09 13:05:30"
+        text = "private message"
+
+        self.db.privateMessage(sender,
+                               receiver,
+                               timestamp,
+                               text)
+
+        channel = self.db.lookupGroup('receiver:sender')
+        assert channel['name'] == 'receiver:sender'
+        assert channel['type'] == 'private'
