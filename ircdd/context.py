@@ -14,13 +14,10 @@ class ConfigStore(dict):
     """
     Container for configuration values and shared acces modules.
     """
-    data = {}
 
-    def __getitem__(self, key):
-        return self.data[key]
-
-    def __setitem__(self, key, item):
-        self.data[key] = item
+    def __init__(self, *args, **kwargs):
+        super(ConfigStore, self).__init__(*args, **kwargs)
+        self.__dict__ = self
 
 
 def makeContext(config):
@@ -41,13 +38,17 @@ def makeContext(config):
         # yaml.load turns a file into an object/dictionary
         conFile = yaml.load(stream)
         stream.close()
-        for x in conFile:
-            ctx[x] = conFile.get(x)
+        for option in conFile:
+            ctx[option] = conFile.get(option)
 
     # if user specified any values via command line
     # overwrite existing values
-    for x in config:
-        ctx[x] = config.get(x)
+    for option in config:
+        if not ctx.get(option, None):
+            ctx[option] = config.get(option)
+        elif (config.defaults.get(option)
+              and config.get(option) != config.defaults.get(option)):
+            ctx[option] = config.get(option)
 
     ctx['realm'] = ShardedRealm(ctx, ctx['hostname'])
 
@@ -55,7 +56,7 @@ def makeContext(config):
     ctx['portal'] = portal.Portal(ctx['realm'], [cred_checker])
 
     ctx["db"] = database.IRCDDatabase(db=ctx["db"],
-                                      host=ctx['rdb_hostname'],
+                                      host=ctx['rdb_host'],
                                       port=ctx['rdb_port'])
 
     ctx['server_info'] = dict(
@@ -63,6 +64,7 @@ def makeContext(config):
         serviceVersion=copyright.version,
         creationDate=ctime()
         )
+
 
     ctx['remote_rw'] = RemoteReadWriter(ctx['nsqd_tcp_address'],
                                         ctx['lookupd_http_address'],
