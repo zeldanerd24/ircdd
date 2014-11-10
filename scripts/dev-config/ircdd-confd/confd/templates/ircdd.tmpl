@@ -1,0 +1,18 @@
+group_on_request: True
+user_on_request: True
+port: 5799
+db: "ircdd"
+
+nsqd_tcp_address:
+    - "127.0.0.1:4150"
+
+lookupd_http_address:
+{{range getvs "/services/nsqlookupd/*"}}
+    - "{{.}}"
+{{end}}
+
+{{with $rdb_hosts := getvs "/services/rethinkdb/*"}}
+{{$rdb := split (index $rdb_hosts 0) ":"}}
+rdb_host: "{{index $rdb 0}}"
+rdb_port: 28015
+{{end}}

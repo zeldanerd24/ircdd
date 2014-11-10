@@ -2,8 +2,10 @@
 Description=IRCDistributedDaemon
 
 After=docker.service
+After=etcd.service
 
 Requires=docker.service
+Requires=etcd.service
 
 [Service]
 TimeoutStartSec=0
@@ -12,8 +14,11 @@ EnvironmentFile=/etc/environment
 
 ExecStartPre=-/usr/bin/docker kill ircdd-%i
 ExecStartPre=-/usr/bin/docker rm ircdd-%i
-ExecStartPre=/usr/bin/docker build -t ircdd-dev /home/core/ircdd/scripts/dev-config
-ExecStart=/usr/bin/docker run -v /home/core/ircdd:/data -p 2375:2375 --name ircdd-%i ircdd-dev bash -c "python setup.py install && twistd -n ircdd -P 2375"
+ExecStartPre=/usr/bin/docker build -t ircdd /home/core/ircdd/scripts/dev-config/ircdd-confd
+
+ExecStart=/usr/bin/docker run \
+                          -p 5799:5799 \
+                          --name ircdd-%i \
 ExecStop=/usr/bin/docker stop ircdd-%i
 
 [X-Fleet]

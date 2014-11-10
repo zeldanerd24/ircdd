@@ -21,17 +21,18 @@ class Options(usage.Options, strcred.AuthOptionMixin):
     supportedInterfaces = (credentials.IUsernamePassword)
 
     optParameters = [
-        ["hostname", "H", "127.0.0.1"],
-        ["port", "P", 5799],
-        ["db", "D", "ircdd"],
-        ["rdb_port", "", 28015],
-        ["rdb_hostname", "", "127.0.0.1"],
+        ["hostname", "H", "127.0.0.1", "The name of this instance."],
+        ["port", "P", 5799, "Port on which to listen for client connections."],
+        ["db", "D", "ircdd", "Name of the database holding cluster data."],
+        ["rdb_port", "", 28015, "Database port for client connections."],
+        ["rdb_host", "", "localhost", "Database host."],
+        ["config", "C", None, "Configuration file."]
         ]
 
-    optFlags = [["ssl", "S"],
-                ["verbose", "V"],
-                ["group_on_request", "G"],
-                ["user_on_request", "U"]]
+    optFlags = [["ssl", "S", "Use ssl."],
+                ["verbose", "V", "Log verbose output."],
+                ["group_on_request", "G", "Create groups on request."],
+                ["user_on_request", "U", "Create users on request."]]
 
     def __init__(self):
         usage.Options.__init__(self)
