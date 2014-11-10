@@ -61,4 +61,7 @@ docs/_build/
 *.pid
 *.cache
 
+# OS X stuff (feel free to  harrass us)
+.DS_Store
+
 scripts/dev-config/cloud-config-tmp.yaml
