@@ -26,7 +26,7 @@ class TestIRCDDAuth:
                       group_on_request=True,
                       user_on_request=True,
                       db=integration.DB,
-                      rdb_hostname=integration.HOST,
+                      rdb_host=integration.HOST,
                       rdb_port=integration.PORT
                       )
         self.ctx = makeContext(config)

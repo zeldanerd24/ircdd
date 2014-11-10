@@ -81,9 +81,17 @@ Vagrant.configure("2") do |config|
       end
 
       if $expose_app_tcp
-        config.vm.network "forwarded_port", guest: 2375, host: ($expose_app_tcp + i -1), auto_correct: true
-        config.vm.network "forwarded_port", guest: 28015, host: 28015, auto_correct: true
-        config.vm.network "forwarded_port", guest: 8080, host: 8080, auto_correct: true
+        config.vm.network "forwarded_port", guest: 5799, host: ($expose_app_tcp + i - 1), auto_correct: true
+      end
+
+      if $expose_rdb
+        config.vm.network "forwarded_port", guest: 28015, host: ($expose_rdb + i - 1), auto_correct: true
+        config.vm.network "forwarded_port", guest: 29015, host: (29015 + i - 1), auto_correct: true
+        config.vm.network "forwarded_port", guest: 8080, host: (8080 + i - 1), auto_correct: true
+      end
+
+      if $expose_nsqlookupd_http
+        config.vm.network "forwarded_port", guest: 4161, host: ($expose_nsqlookupd_http + i - 1), auto_correct: true
       end
 
       config.vm.provider :vmware_fusion do |vb|

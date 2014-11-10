@@ -1,0 +1,23 @@
+#! /bin/bash
+set -eo pipefail
+
+export ETCD_PORT=${ETCD_PORT:-4001}
+export HOST_IP=${HOST_IP:-172.17.42.1}
+export ETCD=$HOST_IP:$ETCD_PORT
+export LOCAL_NODE=${LOCAL_NODE:-172.17.42.1}
+
+# This hack is necessary since the getenv function is not in confd 0.6.3 (latest stable)
+cp /etc/confd/templates/rethinkdb.tmpl /etc/confd/templates/rethinkdb.tmpl.base
+echo "{{\$local_node := \"$local_node\"}}" | cat - /etc/confd/templates/rethinkdb.tmpl.base > /etc/confd/templates/rethinkdb.tmpl
+
+echo "[rdb] booting container. ETCD: $ETCD"
+
+until confd -onetime -node $ETCD -config-file /etc/confd/conf.d/rethinkdb.toml; do
+    echo "[rdb] waiting for confd to create initial rdb configuration"
+    sleep 5
+done
+
+echo "[rdb] starting rdb..."
+rethinkdb serve --config-file /etc/rethinkdb/rethinkdb.conf --daemon
+
+tail -f /var/log/*.log
