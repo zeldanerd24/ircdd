@@ -230,18 +230,18 @@ class IRCDDatabase:
             raise ValueError(password)
 
     def privateMessage(self, sender, receiver, time, message):
-         """
-         Creates an IRC channel for private messages between two users. 
-         The channel_name is the alphabetical ordering of the user's
-         nicknames separated by a ':'
-         """
-     
-         list = [sender, receiver]
-         list.sort()
-         
-         name = list[0] + ":" + list[1]
-         
-         if not lookupGroup(name):
-             createGroup(name, 'owner', 'private')
-         
-         addMessage(name, sender, time, message)
+        """
+        Creates an IRC channel for private messages between two users.
+        The channel_name is the alphabetical ordering of the user's
+        nicknames separated by a ':'
+        """
+
+        list = [sender, receiver]
+        list.sort()
+
+        name = list[0] + ":" + list[1]
+
+        if not self.lookupGroup(name):
+            self.createGroup(name, 'owner', 'private')
+
+        self.addMessage(name, sender, time, message)
