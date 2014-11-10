@@ -151,3 +151,18 @@ class TestIRCDDatabase():
         assert channel['messages'][1]['sender'] == sender2
         assert channel['messages'][1]['time'] == timestamp2
         assert channel['messages'][1]['text'] == text2
+
+    def test_checkIfValidEmail(self):
+        email = "validemail@email.com"
+
+        self.db.checkIfValidEmail(email)
+
+    def test_checkIfValidNickname(self):
+        nickname = "valid2013"
+
+        self.db.checkIfValidNickname(nickname)
+
+    def test_checkIfValidPassword(self):
+        password = "goodPassword2"
+
+        self.db.checkIfValidPassword(password)
