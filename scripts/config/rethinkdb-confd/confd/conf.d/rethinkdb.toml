@@ -1,0 +1,8 @@
+[template]
+src = "rethinkdb.tmpl"
+
+dest = "/etc/rethinkdb/rethinkdb.conf"
+
+keys = [ "/services/rethinkdb" ]
+
+reload_cmd="pkill rethinkdb && rethinkdb serve --config-file /etc/rethinkdb/rethinkdb.conf --daemon"

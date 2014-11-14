@@ -1,0 +1,25 @@
+#! /bin/bash
+set -eo pipefail
+
+export ETCD_PORT=${ETCD_PORT:-4001}
+export NSQD_PORT=${NSQD_PORT:-4150}
+export HOST_IP=${HOST_IP:-172.17.42.1}
+export INSTANCE_NAME=${INSTANCE_NAME:-}
+export ETCD=$HOST_IP:$ETCD_PORT
+
+echo "[ircdd] booting container. ETCD: $ETCD"
+
+until confd -onetime -node $ETCD -config-file /etc/confd/conf.d/ircdd.toml; do
+    echo "[ircdd] waiting for confd to create initial ircdd configuration"
+    sleep 5
+done
+
+echo "[ircdd] is now monitoring etcd for changes..."
+echo "" > /var/log/confd.log
+confd -interval 10 -node $ETCD -config-file /etc/confd/conf.d/ircdd.toml &> /var/log/confd.log &
+
+echo "[ircdd] starting ircdd"
+echo "" > /var/log/ircdd.log
+twistd --logfile=/var/log/ircdd.log ircdd --config=/etc/ircdd/ircdd.yaml --nsqd-tcp-address=$HOST_IP:$NSQD_PORT --hostname=$INSTANCE_NAME
+
+tail -f /var/log/*.log

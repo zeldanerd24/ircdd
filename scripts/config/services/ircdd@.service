@@ -1,0 +1,29 @@
+[Unit]
+Description=IRCDistributedDaemon
+
+After=docker.service
+After=etcd.service
+
+Requires=docker.service
+Requires=etcd.service
+
+[Service]
+TimeoutStartSec=0
+
+EnvironmentFile=/etc/environment
+
+ExecStartPre=-/usr/bin/docker kill ircdd-%i
+ExecStartPre=-/usr/bin/docker rm ircdd-%i
+ExecStartPre=/usr/bin/docker build -t ircdd /home/core/ircdd/scripts/dev-config/ircdd-confd
+
+ExecStart=/usr/bin/docker run \
+                          -p 5799:5799 \
+                          -e HOST_IP=${COREOS_PUBLIC_IPV4} \
+                          -e ETCD_PORT=4001 \
+                          -e NSQD_PORT=4150 \
+                          -e INSTANCE_NAME=ircdd-%i \
+                          --name ircdd-%i \
+ExecStop=/usr/bin/docker stop ircdd-%i
+
+[X-Fleet]
+Conflicts=ircdd@*.service

@@ -1,0 +1,15 @@
+[Unit]
+Description=NSQAdmin
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=5
+ExecStartPre=-/usr/bin/docker kill nsqadmin-%i
+ExecStartPre=-/usr/bin/docker rm nsqadmin-%i
+ExecStartPre=/usr/bin/docker pull dockerfile/nsq
+ExecStart=/usr/bin/docker run --name nsqadmin-%i -p 4171:4171 dockerfile/nsq nsqadmin --lookupd-http-address nsqlookupd-search:4161
+ExecStop=/usr/bin/docker stop nsqadmin-%i
+
+[X-Fleet]
+Conflicts=nsqadmin@*.service
