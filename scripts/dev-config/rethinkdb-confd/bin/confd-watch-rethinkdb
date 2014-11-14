@@ -8,7 +8,8 @@ export LOCAL_NODE=${LOCAL_NODE:-172.17.42.1}
 
 # This hack is necessary since the getenv function is not in confd 0.6.3 (latest stable)
 cp /etc/confd/templates/rethinkdb.tmpl /etc/confd/templates/rethinkdb.tmpl.base
-echo "{{\$local_node := \"$local_node\"}}" | cat - /etc/confd/templates/rethinkdb.tmpl.base > /etc/confd/templates/rethinkdb.tmpl
+printf 'canonical-address = %s\n {{$local_node := "%s"}}\n'\
+       "$LOCAL_NODE" "$LOCAL_NODE" | cat - /etc/confd/templates/rethinkdb.tmpl.base > /etc/confd/templates/rethinkdb.tmpl
 
 echo "[rdb] booting container. ETCD: $ETCD"
 
