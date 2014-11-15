@@ -22,8 +22,6 @@ write_files:
         if [ $? -eq 0 ]; then
           printf '{"host": "%s", "tcp": "%s", "http": "%s"}' "${COREOS_PUBLIC_IPV4}" "4160" "4161" | \
           etcdctl set /services/nsqlookupd/${COREOS_PUBLIC_IPV4} --ttl 30;
-        else
-          etcdctl rm /services/nsqlookupd/${COREOS_PUBLIC_IPV4};
         fi;
         sleep 20;
     done
@@ -37,8 +35,6 @@ write_files:
         if [ $? -eq 0 ]; then
             printf '{"host": "%s", "cluster": "%s", "client": "%s", "http": "%s"}' "${COREOS_PUBLIC_IPV4}" "29015" "28015" "8080"| \
             etcdctl set /services/rethinkdb/${COREOS_PUBLIC_IPV4} --ttl 30;
-        else
-            etcdctl rm /services/rethinkdb/${COREOS_PUBLIC_IPV4};
         fi;
         sleep 20;
     done
