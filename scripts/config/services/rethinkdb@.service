@@ -18,7 +18,7 @@ EnvironmentFile=/etc/environment
 ExecStartPre=-/usr/bin/docker kill rethinkdb-%i
 ExecStartPre=-/usr/bin/docker rm rethinkdb-%i
 ExecStartPre=/usr/bin/docker pull dockerfile/rethinkdb
-ExecStartPre=/usr/bin/docker build -t rethinkdb /home/core/ircdd/scripts/dev-config/rethinkdb-confd
+ExecStartPre=/usr/bin/docker build -t rethinkdb /home/core/ircdd/scripts/rethinkdb-confd
 
 ExecStart=/usr/bin/docker run \
                           -e HOST_IP=${COREOS_PUBLIC_IPV4} \

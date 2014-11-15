@@ -6,7 +6,6 @@ RUN wget https://github.com/kelseyhightower/confd/releases/download/v0.6.3/confd
 
 RUN git clone https://github.com/kzvezdarov/ircdd && \
     cd ircdd && \
-    git checkout tags/v0.1 && \
     python setup.py install
 
 RUN mkdir /etc/ircdd
