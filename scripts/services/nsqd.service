@@ -15,7 +15,7 @@ EnvironmentFile=/etc/environment
 ExecStartPre=-/usr/bin/docker kill nsqd
 ExecStartPre=-/usr/bin/docker rm nsqd
 ExecStartPre=/usr/bin/docker pull dockerfile/nsq
-ExecStartPre=/usr/bin/docker build -t nsqd /home/core/ircdd/scripts/nsq-confd
+ExecStartPre=/usr/bin/docker pull kzvezdarov/ircdd-nsq-confd
 
 ExecStart=/usr/bin/docker run \
                           -e HOST_IP=${COREOS_PUBLIC_IPV4} \
