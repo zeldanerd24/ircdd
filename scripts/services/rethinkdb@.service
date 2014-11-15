@@ -24,7 +24,8 @@ ExecStart=/usr/bin/docker run \
                           -e LOCAL_NODE=${COREOS_PUBLIC_IPV4} \
                           --name rethinkdb-%i \
                           -p 8080:8080 -p 28015:28015 -p 29015:29015 \
-                          rethinkdb confd-watch-rethinkdb
+                          kzvezdarov/ircdd-rethinkdb-confd \
+                          confd-watch-rethinkdb
 
 ExecStop=/usr/bin/docker stop rethinkdb-%i
 
