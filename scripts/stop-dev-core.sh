@@ -1,4 +1,4 @@
 #!/bin/bash
 
-cd `dirname $0`/dev-config
+cd `dirname $0`/config/dev-vagrant
 vagrant halt
