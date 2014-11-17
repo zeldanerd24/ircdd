@@ -17,15 +17,15 @@ EnvironmentFile=/etc/environment
 
 ExecStartPre=-/usr/bin/docker kill rethinkdb-%i
 ExecStartPre=-/usr/bin/docker rm rethinkdb-%i
-ExecStartPre=/usr/bin/docker pull dockerfile/rethinkdb
-ExecStartPre=/usr/bin/docker build -t rethinkdb /home/core/ircdd/scripts/dev-config/rethinkdb-confd
+ExecStartPre=/usr/bin/docker pull kzvezdarov/ircdd-rethinkdb-confd
 
 ExecStart=/usr/bin/docker run \
                           -e HOST_IP=${COREOS_PUBLIC_IPV4} \
                           -e LOCAL_NODE=${COREOS_PUBLIC_IPV4} \
                           --name rethinkdb-%i \
                           -p 8080:8080 -p 28015:28015 -p 29015:29015 \
-                          rethinkdb confd-watch-rethinkdb
+                          kzvezdarov/ircdd-rethinkdb-confd \
+                          confd-watch-rethinkdb
 
 ExecStop=/usr/bin/docker stop rethinkdb-%i
 

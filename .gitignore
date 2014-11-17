@@ -64,4 +64,4 @@ docs/_build/
 # OS X stuff (feel free to  harrass us)
 .DS_Store
 
-scripts/dev-config/cloud-config-tmp.yaml
+scripts/config/dev-vagrant/cloud-config-tmp.yaml

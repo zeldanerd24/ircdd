@@ -14,7 +14,7 @@ EnvironmentFile=/etc/environment
 
 ExecStartPre=-/usr/bin/docker kill ircdd-%i
 ExecStartPre=-/usr/bin/docker rm ircdd-%i
-ExecStartPre=/usr/bin/docker build -t ircdd /home/core/ircdd/scripts/dev-config/ircdd-confd
+ExecStartPre=/usr/bin/docker build -t dev-ircdd /home/core/ircdd/scripts/containers/dev-ircdd-confd
 
 ExecStart=/usr/bin/docker run \
                           -p 5799:5799 \
@@ -23,7 +23,6 @@ ExecStart=/usr/bin/docker run \
                           -e NSQD_PORT=4150 \
                           -e INSTANCE_NAME=ircdd-%i \
                           --name ircdd-%i \
+                          -v /home/core/ircdd:/data \
+                          dev-ircdd bash -c "python setup.py install && confd-watch-ircdd"
 ExecStop=/usr/bin/docker stop ircdd-%i
-
-[X-Fleet]
-Conflicts=ircdd@*.service

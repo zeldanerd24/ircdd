@@ -28,7 +28,7 @@ end
 
 # Size of the CoreOS cluster created by Vagrant
 # Change to more than one during cluster integration
-$num_instances=1
+#$num_instances=1
 
 # Official CoreOS channel from which updates should be downloaded
 $update_channel='alpha'
@@ -54,4 +54,4 @@ $vb_gui = false
 $vb_memory = 1024
 $vb_cpus = 1
 
-$synced_folder = "../../"
+#$synced_folder = "."

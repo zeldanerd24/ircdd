@@ -1,0 +1,40 @@
+#cloud-config
+coreos:
+  etcd:
+    addr: $public_ipv4:4001
+    peer-addr: $public_ipv4:7001
+    discovery: https://discovery.etcd.io/776a1401ba4e73f5d731a3dbb61c23fb
+  fleet:
+    public-ip: $public_ipv4
+  units:
+  - name: etcd.service
+    command: start
+  - name: fleet.service
+    command: start
+write_files:
+- path: /home/core/nsqlookupd-registration-loop.sh
+  permissions: 777
+  owner: root
+  content: |
+    #! /bin/bash
+    while true; do
+        curl -f ${COREOS_PRIVATE_IPV4}:4161/ping;
+        if [ $? -eq 0 ]; then
+          printf '{"host": "%s", "tcp": "%s", "http": "%s"}' "${COREOS_PUBLIC_IPV4}" "4160" "4161" | \
+          etcdctl set /services/nsqlookupd/${COREOS_PUBLIC_IPV4} --ttl 30;
+        fi;
+        sleep 20;
+    done
+- path: /home/core/rethinkdb-registration-loop.sh
+  permissions: 777
+  owner: root
+  content: |
+    #! /bin/bash
+    while true; do
+        curl -f ${COREOS_PUBLIC_IPV4}:8080;
+        if [ $? -eq 0 ]; then
+            printf '{"host": "%s", "cluster": "%s", "client": "%s", "http": "%s"}' "${COREOS_PUBLIC_IPV4}" "29015" "28015" "8080"| \
+            etcdctl set /services/rethinkdb/${COREOS_PUBLIC_IPV4} --ttl 30;
+        fi;
+        sleep 20;
+    done

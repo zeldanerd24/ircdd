@@ -1,0 +1,16 @@
+group_on_request: True
+user_on_request: True
+port: 5799
+db: "ircdd"
+
+lookupd_http_address:
+{{range gets "/services/nsqlookupd/*"}}
+{{$lookupd_data := json .Value}}
+    - "{{$lookupd_data.host}}:{{$lookupd_data.http}}"
+{{end}}
+
+{{range gets "/services/rethinkdb/*"}}
+{{$rdb_data := json .Value}}
+rdb_host: "{{$rdb_data.host}}"
+rdb_port: {{$rdb_data.client}}
+{{end}}

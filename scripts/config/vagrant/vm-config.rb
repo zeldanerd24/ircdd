@@ -5,20 +5,20 @@
 if File.exists?('cloud-config.yaml') && ARGV[0].eql?('up')
   require 'open-uri'
   require 'yaml'
- 
+
   token = open('https://discovery.etcd.io/new').read
- 
+
   data = YAML.load(IO.readlines('cloud-config.yaml')[1..-1].join)
   data['coreos']['etcd']['discovery'] = token
- 
+
   lines = YAML.dump(data).split("\n")
   lines[0] = '#cloud-config'
- 
+
   open('cloud-config.yaml', 'r+') do |f|
     f.puts(lines.join("\n"))
   end
 end
-#
+
 #
 # coreos-vagrant is configured through a series of configuration
 # options (global ruby variables) which are detailed below. To modify
@@ -44,11 +44,14 @@ $enable_serial_logging=false
 # If 2375 is used, Vagrant will auto-increment (e.g. in the case of $num_instances > 1)
 # You can then use the docker tool locally by setting the following env var:
 #   export DOCKER_HOST='tcp://127.0.0.1:2375'
-#$expose_docker_tcp=2375
+#$expose_docker_tcp=3375
+$expose_app_tcp=5799
+$expose_rdb=28015
+$expose_nsqlookupd_http=4161
 
 # Setting for VirtualBox VMs
 $vb_gui = false
 $vb_memory = 1024
 $vb_cpus = 1
 
-$synced_folder = "."
+$synced_folder = "../../../"
