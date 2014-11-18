@@ -195,8 +195,8 @@ class IRCDDatabase:
         valid_email = re.compile(
             r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)")
 
-        if valid_email.match(email) is None:
-            print "Invalid Email Address"
+        if not valid_email.match(email):
+            log.error("Invalid email: %s" % email)
             raise ValueError(email)
 
     def checkIfValidNickname(self, nickname):
@@ -210,8 +210,8 @@ class IRCDDatabase:
         valid_nickname = re.compile(
             r"^(?i)[a-z0-9_-]{%s,%s}$" % (min_len, max_len))
 
-        if valid_nickname.match(nickname) is None:
-            print "Invalid nickname"
+        if not valid_nickname.match(nickname):
+            log.error("Invalid nick: %s" % nickname)
             raise ValueError(nickname)
 
     def checkIfValidPassword(self, password):
@@ -225,8 +225,8 @@ class IRCDDatabase:
         valid_password = re.compile(
             r"^(?i)[a-z0-9_-]{%s,%s}$" % (min_len, max_len))
 
-        if valid_password.match(password) is None:
-            print "Invalid password"
+        if not valid_password.match(password):
+            log.error("Invalid password: %s" % password)
             raise ValueError(password)
 
     def privateMessage(self, sender, receiver, time, message):
