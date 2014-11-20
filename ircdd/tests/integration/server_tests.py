@@ -1,24 +1,81 @@
 import rethinkdb as r
 
 from twisted.test import proto_helpers
-from twisted.internet import task
 from twisted.words.protocols import irc
 
-from ircdd.server import IRCDDFactory
+from ircdd.server import IRCDDFactory, ShardedUser
 from ircdd.remote import _channels, _topics
 from ircdd.remote import _delete_channel, _delete_topic
 from ircdd.context import makeContext
 from ircdd.tests import integration
 
 
+class TestShardedUser:
+    def setUp(self):
+        self.conn = r.connect(db=integration.DB,
+                              host=integration.HOST,
+                              port=integration.PORT)
+
+        integration.createTables()
+
+        config = dict(nsqd_tcp_address=["127.0.0.1:4150"],
+                      lookupd_http_address=["127.0.0.1:4161"],
+                      hostname="testserver",
+                      group_on_request=True,
+                      user_on_request=True,
+                      db=integration.DB,
+                      rdb_host=integration.HOST,
+                      rdb_port=integration.PORT
+                      )
+        self.ctx = makeContext(config)
+
+        self.shardedUser = ShardedUser(self.ctx, "john")
+
+    def tearDown(self):
+        self.shardedUser = None
+
+        integration.dropTables()
+
+        self.conn.close()
+
+        for topic in _topics(self.ctx["lookupd_http_address"]):
+            for chan in _channels(topic, self.ctx["lookupd_http_address"]):
+                _delete_channel(topic, chan, self.ctx["lookupd_http_address"])
+            _delete_topic(topic, self.ctx["lookupd_http_address"])
+
+        self.ctx["db"].conn.close()
+        self.ctx = None
+
+    def test_userHeartbeats(self):
+        self.shardedUser.loggedIn(self.ctx.realm, None)
+
+        hb = r.db(integration.DB).table("user_presence").get(
+            "john"
+        ).run(self.conn)
+
+        assert hb
+        assert hb.get("last_heartbeat")
+        assert hb.get("last_heartbeat") != ""
+
+        self.ctx.db.heartbeatUserPresence("john")
+        hb2 = r.db(integration.DB).table("user_presence").get(
+            "john"
+        ).run(self.conn)
+
+        assert hb2
+        assert hb2.get("last_heartbeat")
+        assert hb2.get("last_heartbeat") != ""
+
+        assert hb.get("last_heartbeat") != hb2.get("last_heartbeat")
+
+
 class TestIRCDDAuth:
     def setUp(self):
-        conn = r.connect(db=integration.DB,
-                         host=integration.HOST,
-                         port=integration.PORT)
-        r.db(integration.DB).table_create("users").run(conn)
-        r.db(integration.DB).table_create("groups").run(conn)
-        conn.close()
+        self.conn = r.connect(db=integration.DB,
+                              host=integration.HOST,
+                              port=integration.PORT)
+
+        integration.createTables()
 
         config = dict(nsqd_tcp_address=["127.0.0.1:4150"],
                       lookupd_http_address=["127.0.0.1:4161"],
@@ -35,7 +92,6 @@ class TestIRCDDAuth:
         self.ctx["db"].createUser("jane", password="pw2", registered=True)
         self.ctx["db"].createUser("jill", password="pw3", registered=True)
 
-        self.clock = task.Clock()
         self.factory = IRCDDFactory(self.ctx)
         self.protocol = self.factory.buildProtocol(("127.0.0.1", 0))
         self.transport = proto_helpers.StringTransport()
@@ -45,12 +101,9 @@ class TestIRCDDAuth:
         self.transport.loseConnection()
         self.protocol.connectionLost(None)
 
-        conn = r.connect(db=integration.DB,
-                         host=integration.HOST,
-                         port=integration.PORT)
-        r.db(integration.DB).table_drop("users").run(conn)
-        r.db(integration.DB).table_drop("groups").run(conn)
-        conn.close()
+        integration.dropTables()
+
+        self.conn.close()
 
         for topic in _topics(self.ctx["lookupd_http_address"]):
             for chan in _channels(topic, self.ctx["lookupd_http_address"]):

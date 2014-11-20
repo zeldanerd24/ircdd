@@ -1,7 +1,7 @@
 from time import time
 from twisted.words.service import IRCUser, Group, User, WordsRealm
 from twisted.application import internet
-from twisted.internet import protocol, defer
+from twisted.internet import protocol, defer, task
 from twisted.python import failure, log
 from twisted.words import ewords, iwords
 
@@ -55,6 +55,20 @@ class ShardedUser(User):
                           self, parsed_msg["msg_body"])
 
         message.finish()
+
+    def loggedIn(self, realm, mind):
+        super(ShardedUser, self).loggedIn(realm, mind)
+
+        self.ctx.db.heartbeatUserPresence(self.name)
+        self.heartbeat = task.LoopingCall(self.ctx.db.heartbeatUserPresence,
+                                          self.name)
+
+        self.heartbeat.start(10.0)
+
+    def logout(self):
+        super(ShardedUser, self).logout()
+
+        self.heartbeat.stop()
 
 
 class ShardedGroup(Group):

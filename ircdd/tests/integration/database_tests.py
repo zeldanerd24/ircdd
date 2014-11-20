@@ -6,24 +6,20 @@ from ircdd.tests import integration
 
 class TestIRCDDatabase():
     def setUp(self):
-        conn = r.connect(db=integration.DB,
-                         host=integration.HOST,
-                         port=integration.PORT)
-        r.db(integration.DB).table_create("users").run(conn)
-        r.db(integration.DB).table_create("groups").run(conn)
-        conn.close()
+        self.conn = r.connect(db=integration.DB,
+                              host=integration.HOST,
+                              port=integration.PORT)
+
+        integration.createTables()
 
         self.db = database.IRCDDatabase(integration.DB,
                                         integration.HOST,
                                         integration.PORT)
 
     def tearDown(self):
-        conn = r.connect(db=integration.DB,
-                         host=integration.HOST,
-                         port=integration.PORT)
-        r.db(integration.DB).table_drop("users").run(conn)
-        r.db(integration.DB).table_drop("groups").run(conn)
-        conn.close()
+        integration.dropTables()
+
+        self.conn.close()
 
         self.db.conn.close()
         self.db = None
@@ -181,3 +177,58 @@ class TestIRCDDatabase():
         channel = self.db.lookupGroup('receiver:sender')
         assert channel['name'] == 'receiver:sender'
         assert channel['type'] == 'private'
+
+    def test_heartbeatsUserPresence(self):
+        result = self.db.heartbeatUserPresence("test_user")
+        assert result["inserted"] == 1
+
+        result = self.db.heartbeatUserPresence("test_user")
+        assert result["replaced"] == 1
+
+    def test_heartbeatGroupPresence(self):
+        # Creates initial heartbeat
+        result = self.db.heartbeatUserGroupPresence("test_user", "test_group")
+
+        heartbeat_data = r.db(integration.DB).table("group_presence").get(
+            "test_group"
+        ).run(self.conn)
+
+        assert result["inserted"] == 1
+        assert heartbeat_data["user_heartbeats"].get("test_user")
+
+        # Updates user heartbeat
+        result = self.db.heartbeatUserGroupPresence("test_user", "test_group")
+        assert result["replaced"] == 1
+
+        new_heartbeat_data = r.db(integration.DB).table("group_presence").get(
+            "test_group"
+        ).run(self.conn)
+
+        assert new_heartbeat_data["user_heartbeats"]["test_user"] != \
+            heartbeat_data["user_heartbeats"]["test_user"]
+
+    def test_removeGroupPresence(self):
+        self.db.heartbeatUserGroupPresence("test_user", "test_group")
+        result = self.db.removeUserGroupPresence("test_user", "test_group")
+
+        assert result["replaced"] == 1
+
+        heartbeat_data = r.db(integration.DB).table("group_presence").get(
+            "test_group"
+        ).run(self.conn)
+
+        assert False == heartbeat_data["user_heartbeats"].get("test_user",
+                                                              False)
+
+    def test_observesGroupPresenceChanges(self):
+        self.db.heartbeatUserGroupPresence("john", "test_group")
+        self.db.heartbeatUserGroupPresence("bob", "test_group")
+
+        changefeed = self.db.observePresenceInGroup("test_group")
+
+        self.db.removeUserGroupPresence("john", "test_group")
+
+        change = next(changefeed)
+
+        assert change["old_val"]["user_heartbeats"].get("john", None) is not None \
+            and change["new_val"]["user_heartbeats"].get("john", None) is None

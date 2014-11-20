@@ -55,24 +55,24 @@ class IRCDDatabase:
         ).run(self.conn)
 
         if not presence:
-            r.table(self.USER_PRESENCE_TABLE).insert({
+            return r.table(self.USER_PRESENCE_TABLE).insert({
                 "id": nickname,
-                "last_hearbeat": r.now(),
+                "last_heartbeat": r.now(),
             }).run(self.conn)
         else:
-            r.table(self.USER_PRESENCE_TABLE).get(nickname).update({
-                "last_hearbeat": r.now()
+            return r.table(self.USER_PRESENCE_TABLE).get(nickname).update({
+                "last_heartbeat": r.now()
             }).run(self.conn)
 
     def removeUserPresence(self, nickname):
-        r.table(self.USER_PRESENCE_TABLE).get(
+        return r.table(self.USER_PRESENCE_TABLE).get(
             nickname
         ).delete().run(self.conn)
 
     def removeUserGroupPresence(self, nickname, group):
-        r.table(self.USER_PRESENCE_TABLE).get(group).replace(
-            r.row.without({"user_heartbeats": nickname})
-        ).delete().run(self.conn)
+        return r.table(self.GROUP_PRESENCE_TABLE).get(group).replace(
+            r.row.without({"user_heartbeats": {nickname: True}})
+        ).run(self.conn)
 
     def heartbeatUserGroupPresence(self, nickname, group):
         presence = r.table(self.GROUP_PRESENCE_TABLE).get(
@@ -80,21 +80,21 @@ class IRCDDatabase:
         ).run(self.conn)
 
         if not presence:
-            r.table(self.GROUP_PRESENCE_TABLE).insert({
+            return r.table(self.GROUP_PRESENCE_TABLE).insert({
                 "id": group,
                 "user_heartbeats": {
                     nickname: r.now()
                 }
             }).run(self.conn)
         else:
-            r.table(self.GROUP_PRESENCE_TABLE).get(group).update({
+            return r.table(self.GROUP_PRESENCE_TABLE).get(group).update({
                 "user_heartbeats": r.row["user_heartbeats"].merge({
                     nickname: r.now()
                 })
             }).run(self.conn)
 
     def observePresenceInGroup(self, group):
-        return r.table(self.GROUP_RESENCE_TABLE).changes().filter(
+        return r.table(self.GROUP_PRESENCE_TABLE).changes().filter(
             r.row["old_val"]["id"] == group or r.row["new_val"]["id"] == group
         ).run(self.conn)
 
@@ -175,7 +175,7 @@ class IRCDDatabase:
             ).run(self.conn)
 
         if not exists:
-            r.table(self.GROUPS_TABLE).insert({
+            return r.table(self.GROUPS_TABLE).insert({
                 "id": name,
                 "name": name,
                 "owner": owner,
@@ -216,7 +216,7 @@ class IRCDDatabase:
         Set the IRC channel's topic
         """
 
-        r.table(self.GROUPS_TABLE).get(name).update({
+        return r.table(self.GROUPS_TABLE).get(name).update({
             "topic": {
                 "topic": topic,
                 "topic_time": topic_time,
