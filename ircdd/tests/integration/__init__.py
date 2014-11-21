@@ -26,8 +26,8 @@ def createTables():
                      port=PORT)
     r.db(DB).table_create("users").run(conn)
     r.db(DB).table_create("groups").run(conn)
-    r.db(DB).table_create("user_presence").run(conn)
-    r.db(DB).table_create("group_presence").run(conn)
+    r.db(DB).table_create("user_sessions").run(conn)
+    r.db(DB).table_create("group_states").run(conn)
     conn.close()
 
 
@@ -37,6 +37,6 @@ def dropTables():
                      port=PORT)
     r.db(DB).table_drop("users").run(conn)
     r.db(DB).table_drop("groups").run(conn)
-    r.db(DB).table_drop("user_presence").run(conn)
-    r.db(DB).table_drop("group_presence").run(conn)
+    r.db(DB).table_drop("user_sessions").run(conn)
+    r.db(DB).table_drop("group_states").run(conn)
     conn.close()

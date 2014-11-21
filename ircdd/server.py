@@ -17,6 +17,16 @@ class ShardedUser(User):
         self.ctx = ctx
         self.ctx["remote_rw"].subscribe(self.name, self.receiveRemote)
 
+        self.heartbeat = task.LoopingCall(self._hbPresence)
+        self.heartbeat_groups = task.LoopingCall(self._hbGroupPresence)
+
+    def _hbPresence(self):
+        self.ctx.db.heartbeatUserPresence(self.name)
+
+    def _hbGroupPresence(self):
+        for group in self.groups:
+            self.ctx.db.heartbeatUserGroupPresence(self.name, group.name)
+
     def send(self, recipient, message):
         """
         Sends message to the given recipient, even if the
@@ -37,7 +47,7 @@ class ShardedUser(User):
         message["sender"] = dict(name=self.name, hostname=self.ctx["hostname"])
         message["recipient"] = recipient.name
 
-        self.ctx["remote_rw"].publish(recipient.name, message)
+        self.ctx.remote_rw.publish(recipient.name, message)
         self.lastMessage = time()
         return recipient.receive(self.name, recipient, message)
 
@@ -59,16 +69,34 @@ class ShardedUser(User):
     def loggedIn(self, realm, mind):
         super(ShardedUser, self).loggedIn(realm, mind)
 
-        self.ctx.db.heartbeatUserPresence(self.name)
-        self.heartbeat = task.LoopingCall(self.ctx.db.heartbeatUserPresence,
-                                          self.name)
+        self._hbPresence()
 
         self.heartbeat.start(10.0)
+        self.heartbeat_groups.start(10.0)
 
     def logout(self):
-        super(ShardedUser, self).logout()
-
         self.heartbeat.stop()
+        self.heartbeat_groups.stop()
+
+        for g in self.groups:
+            self.leave(g)
+
+        self.ctx.db.removeUserPresence(self.name)
+
+    def join(self, group):
+        def cbJoin(result):
+            self.groups.append(group)
+            self._hbGroupPresence()
+            return result
+
+        return group.add(self.mind).addCallback(cbJoin)
+
+    def leave(self, group, reason=None):
+        def cbLeave(result):
+            self.groups.remove(group)
+            self.ctx.db.removeUserGroupPresence(self.name, group.name)
+
+        return group.remove(self.mind, reason).addCallback(cbLeave)
 
 
 class ShardedGroup(Group):
@@ -80,7 +108,11 @@ class ShardedGroup(Group):
     def __init__(self, ctx, name):
         super(ShardedGroup, self).__init__(name)
         self.ctx = ctx
-        self.ctx["remote_rw"].subscribe(self.name, self.receiveRemote)
+        self.ctx.remote_rw.subscribe(self.name, self.receiveRemote)
+
+    def _observeSharedPresence(self):
+        for change in self.ctx.db.observePresenceInGroup(self.name):
+            log.msg("Change %s" % str(change))
 
     def receiveRemote(self, message):
         """

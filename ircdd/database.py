@@ -12,8 +12,8 @@ class IRCDDatabase:
 
     USERS_TABLE = 'users'
     GROUPS_TABLE = 'groups'
-    USER_PRESENCE_TABLE = 'user_presence'
-    GROUP_PRESENCE_TABLE = 'group_presence'
+    USER_SESSIONS_TABLE = 'user_sessions'
+    GROUP_STATES_TABLE = 'group_states'
 
     def __init__(self, db="ircdd", host="127.0.0.1", port=28015):
         self.rdb_host = host
@@ -49,52 +49,57 @@ class IRCDDatabase:
         else:
             log.err("User already exists: %s" % nickname)
 
-    def heartbeatUserPresence(self, nickname):
-        presence = r.table(self.USER_PRESENCE_TABLE).get(
+    def heartbeatUserSession(self, nickname):
+        presence = r.table(self.USER_SESSIONS_TABLE).get(
             nickname
         ).run(self.conn)
 
         if not presence:
-            return r.table(self.USER_PRESENCE_TABLE).insert({
+            return r.table(self.USER_SESSIONS_TABLE).insert({
                 "id": nickname,
                 "last_heartbeat": r.now(),
             }).run(self.conn)
         else:
-            return r.table(self.USER_PRESENCE_TABLE).get(nickname).update({
+            return r.table(self.USER_SESSIONS_TABLE).get(nickname).update({
                 "last_heartbeat": r.now()
             }).run(self.conn)
 
-    def removeUserPresence(self, nickname):
-        return r.table(self.USER_PRESENCE_TABLE).get(
+    def removeUserSession(self, nickname):
+        return r.table(self.USER_SESSIONS_TABLE).get(
             nickname
         ).delete().run(self.conn)
 
-    def removeUserGroupPresence(self, nickname, group):
-        return r.table(self.GROUP_PRESENCE_TABLE).get(group).replace(
+    def removeUserFromGroup(self, nickname, group):
+        return r.table(self.GROUP_STATES_TABLE).get(group).replace(
             r.row.without({"user_heartbeats": {nickname: True}})
         ).run(self.conn)
 
-    def heartbeatUserGroupPresence(self, nickname, group):
-        presence = r.table(self.GROUP_PRESENCE_TABLE).get(
+    def heartbeatUserInGroup(self, nickname, group):
+        presence = r.table(self.GROUP_STATES_TABLE).get(
             group
         ).run(self.conn)
 
         if not presence:
-            return r.table(self.GROUP_PRESENCE_TABLE).insert({
+            return r.table(self.GROUP_STATES_TABLE).insert({
                 "id": group,
                 "user_heartbeats": {
                     nickname: r.now()
                 }
             }).run(self.conn)
         else:
-            return r.table(self.GROUP_PRESENCE_TABLE).get(group).update({
+            return r.table(self.GROUP_STATES_TABLE).get(group).update({
                 "user_heartbeats": r.row["user_heartbeats"].merge({
                     nickname: r.now()
                 })
             }).run(self.conn)
 
-    def observePresenceInGroup(self, group):
-        return r.table(self.GROUP_PRESENCE_TABLE).changes().filter(
+    def observeGroupState(self, group):
+        return r.table(self.GROUP_STATES_TABLE).changes().filter(
+            r.row["old_val"]["id"] == group or r.row["new_val"]["id"] == group
+        ).run(self.conn)
+
+    def observeGroupMeta(self, group):
+        return r.table(self.GROUP_TABLE).changes().filter(
             r.row["old_val"]["id"] == group or r.row["new_val"]["id"] == group
         ).run(self.conn)
 

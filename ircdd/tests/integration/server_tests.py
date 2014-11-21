@@ -3,7 +3,7 @@ import rethinkdb as r
 from twisted.test import proto_helpers
 from twisted.words.protocols import irc
 
-from ircdd.server import IRCDDFactory, ShardedUser
+from ircdd.server import IRCDDFactory, ShardedUser, ShardedGroup
 from ircdd.remote import _channels, _topics
 from ircdd.remote import _delete_channel, _delete_topic
 from ircdd.context import makeContext
@@ -29,10 +29,19 @@ class TestShardedUser:
                       )
         self.ctx = makeContext(config)
 
+        self.factory = IRCDDFactory(self.ctx)
+        self.protocol = self.factory.buildProtocol(("127.0.0.1", 0))
+        self.transport = proto_helpers.StringTransport()
+        self.protocol.makeConnection(self.transport)
+
         self.shardedUser = ShardedUser(self.ctx, "john")
+        self.shardedUser.mind = self.protocol
+        self.shardedUser.mind.name = "john"
 
     def tearDown(self):
         self.shardedUser = None
+        self.transport.loseConnection()
+        self.protocol.connectionLost(None)
 
         integration.dropTables()
 
@@ -67,6 +76,19 @@ class TestShardedUser:
         assert hb2.get("last_heartbeat") != ""
 
         assert hb.get("last_heartbeat") != hb2.get("last_heartbeat")
+
+    def test_userGroupHeartbeats(self):
+        group = ShardedGroup(self.ctx, "test_group")
+
+        self.shardedUser.join(group)
+
+        hb = r.db(integration.DB).table("group_presence").get(
+            "test_group"
+        ).run(self.conn)
+
+        assert hb
+        assert hb["user_heartbeats"]["john"]
+        assert hb["user_heartbeats"]["john"] != ""
 
 
 class TestIRCDDAuth:

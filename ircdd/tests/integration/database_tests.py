@@ -178,18 +178,18 @@ class TestIRCDDatabase():
         assert channel['name'] == 'receiver:sender'
         assert channel['type'] == 'private'
 
-    def test_heartbeatsUserPresence(self):
-        result = self.db.heartbeatUserPresence("test_user")
+    def test_heartbeatsUserSession(self):
+        result = self.db.heartbeatUserSession("test_user")
         assert result["inserted"] == 1
 
-        result = self.db.heartbeatUserPresence("test_user")
+        result = self.db.heartbeatUserSession("test_user")
         assert result["replaced"] == 1
 
-    def test_heartbeatGroupPresence(self):
+    def test_heartbeatUserInGroup(self):
         # Creates initial heartbeat
-        result = self.db.heartbeatUserGroupPresence("test_user", "test_group")
+        result = self.db.heartbeatUserInGroup("test_user", "test_group")
 
-        heartbeat_data = r.db(integration.DB).table("group_presence").get(
+        heartbeat_data = r.db(integration.DB).table("group_states").get(
             "test_group"
         ).run(self.conn)
 
@@ -197,36 +197,36 @@ class TestIRCDDatabase():
         assert heartbeat_data["user_heartbeats"].get("test_user")
 
         # Updates user heartbeat
-        result = self.db.heartbeatUserGroupPresence("test_user", "test_group")
+        result = self.db.heartbeatUserInGroup("test_user", "test_group")
         assert result["replaced"] == 1
 
-        new_heartbeat_data = r.db(integration.DB).table("group_presence").get(
+        new_heartbeat_data = r.db(integration.DB).table("group_states").get(
             "test_group"
         ).run(self.conn)
 
         assert new_heartbeat_data["user_heartbeats"]["test_user"] != \
             heartbeat_data["user_heartbeats"]["test_user"]
 
-    def test_removeGroupPresence(self):
-        self.db.heartbeatUserGroupPresence("test_user", "test_group")
-        result = self.db.removeUserGroupPresence("test_user", "test_group")
+    def test_removeUserFromGroup(self):
+        self.db.removeUserFromGroup("test_user", "test_group")
+        result = self.db.removeUserSession("test_user", "test_group")
 
         assert result["replaced"] == 1
 
-        heartbeat_data = r.db(integration.DB).table("group_presence").get(
+        heartbeat_data = r.db(integration.DB).table("group_states").get(
             "test_group"
         ).run(self.conn)
 
         assert False == heartbeat_data["user_heartbeats"].get("test_user",
                                                               False)
 
-    def test_observesGroupPresenceChanges(self):
-        self.db.heartbeatUserGroupPresence("john", "test_group")
-        self.db.heartbeatUserGroupPresence("bob", "test_group")
+    def test_observesGroupStateChanges(self):
+        self.db.heartbeatUserInGroup("john", "test_group")
+        self.db.heartbeatUserInGroup("bob", "test_group")
 
-        changefeed = self.db.observePresenceInGroup("test_group")
+        changefeed = self.db.observeGroupState("test_group")
 
-        self.db.removeUserGroupPresence("john", "test_group")
+        self.db.removeUserFromGroup("john", "test_group")
 
         change = next(changefeed)
 
