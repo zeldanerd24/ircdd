@@ -1,19 +1,30 @@
 from time import time
-from twisted.words.service import IRCUser, Group, User, WordsRealm
-from twisted.application import internet
-from twisted.internet import protocol, defer, task
-from twisted.python import failure, log
+
+from zope.interface import implements
+
 from twisted.words import ewords, iwords
+from twisted.words.service import IRCUser
+from twisted.application import internet
+from twisted.internet import protocol, defer, task, reactor, threads
+from twisted.python import failure, log
+from twisted.cred import portal
 
 
-class ShardedUser(User):
+class ShardedUser(object):
+    implements(iwords.IUser)
+    mind = None
+    realm = None
+
     """
     A User which may exist in a sharded state on different IRC
     servers. It subscribes to its own topic on the message queue
     and sends/responds to remote messages.
     """
     def __init__(self, ctx, name):
-        super(ShardedUser, self).__init__(name)
+        self.name = name
+        self.groups = []
+        self.lastMessage = time()
+
         self.ctx = ctx
         self.ctx["remote_rw"].subscribe(self.name, self.receiveRemote)
 
@@ -21,11 +32,11 @@ class ShardedUser(User):
         self.heartbeat_groups = task.LoopingCall(self._hbGroupPresence)
 
     def _hbPresence(self):
-        self.ctx.db.heartbeatUserPresence(self.name)
+        self.ctx.db.heartbeatUserSession(self.name)
 
     def _hbGroupPresence(self):
         for group in self.groups:
-            self.ctx.db.heartbeatUserGroupPresence(self.name, group.name)
+            self.ctx.db.heartbeatUserInGroup(self.name, group.name)
 
     def send(self, recipient, message):
         """
@@ -67,7 +78,9 @@ class ShardedUser(User):
         message.finish()
 
     def loggedIn(self, realm, mind):
-        super(ShardedUser, self).loggedIn(realm, mind)
+        self.realm = realm
+        self.mind = mind
+        self.signOn = time()
 
         self._hbPresence()
 
@@ -81,7 +94,7 @@ class ShardedUser(User):
         for g in self.groups:
             self.leave(g)
 
-        self.ctx.db.removeUserPresence(self.name)
+        self.ctx.db.removeUserSession(self.name)
 
     def join(self, group):
         def cbJoin(result):
@@ -94,25 +107,109 @@ class ShardedUser(User):
     def leave(self, group, reason=None):
         def cbLeave(result):
             self.groups.remove(group)
-            self.ctx.db.removeUserGroupPresence(self.name, group.name)
+            self.ctx.db.removeUserFromGroup(self.name, group.name)
 
         return group.remove(self.mind, reason).addCallback(cbLeave)
 
 
-class ShardedGroup(Group):
+class ShardedGroup(object):
+    implements(iwords.IGroup)
+
     """
     A group which may exist in a sharded state on different
     servers. It subscribes to its own topic on the message queue
     and sends/receives remote messages.
     """
     def __init__(self, ctx, name):
-        super(ShardedGroup, self).__init__(name)
+        self.name = name
+        self.users = {}
+
         self.ctx = ctx
         self.ctx.remote_rw.subscribe(self.name, self.receiveRemote)
 
-    def _observeSharedPresence(self):
-        for change in self.ctx.db.observePresenceInGroup(self.name):
+        self.getGroupMeta()
+        self.getGroupState()
+
+        threads.deferToThread(self._observeGroupMeta)
+        threads.deferToThread(self._observeGroupState)
+
+    def _ebUserCall(self, err, p):
+        return failure.Failure(Exception(p, err))
+
+    def _cbUserCall(self, results):
+        for (success, result) in results:
+            if not success:
+                user, err = result.value
+                self.remove(user, err.getErrorMessage())
+
+    def getGroupMeta(self):
+        meta = self.ctx.db.lookupGroup(self.name)
+        if meta:
+            self.meta = {
+                "topic": meta["topic"]["topic"],
+                "topic_author": meta["topic"]["topic_author"]
+            }
+
+    def getGroupState(self):
+        state = self.ctx.db.getGroupState(self.name)
+        if state:
+            for user, hb in state["user_heartbeats"]:
+                self.add(ShardedUser(user))
+
+    def _observeGroupState(self):
+        changeset = self.ctx.db.observeGroupState(self.name)
+
+        reactor.addSystemEventTrigger("before", "shutdown",
+                                      changeset.conn.close,
+                                      False)
+        for change in changeset:
             log.msg("Change %s" % str(change))
+
+    def _observeGroupMeta(self):
+        changeset = self.ctx.db.observeGroupMeta(self.name)
+
+        reactor.addSystemEventTrigger("before", "shutdown",
+                                      changeset.conn.close,
+                                      False)
+        for change in changeset:
+            reactor.callFromThread(log.msg("Change %s:" % str(change)))
+
+    def add(self, added_user):
+        assert iwords.IChatClient.providedBy(added_user), \
+            "%r is not a chat client" % (added_user,)
+
+        if added_user.name not in self.users:
+            additions = []
+            self.users[added_user.name] = added_user
+            for user in self.users.itervalues():
+                if user is not added_user:
+                    d = defer.maybeDeferred(user.userJoined, self, added_user)
+                    d.addErrback(self._ebUserCall, p=user)
+                    additions.append(d)
+
+            defer.DeferredList(additions).addCallback(self._cbUserCall)
+        return defer.succeed(None)
+
+    def remove(self, removed_user, reason=None):
+        assert reason is None or isinstance(reason, unicode)
+
+        try:
+            del self.users[removed_user.name]
+        except KeyError:
+            log.err("Removing user %s failed: user does not exist" %
+                    removed_user.name)
+        else:
+            removals = []
+            for user in self.users.itervalues():
+                if user is not removed_user:
+                    d = defer.maybeDeferred(user.userLeft,
+                                            self,
+                                            removed_user,
+                                            reason)
+                    d.addErrback(self._ebUserCall, p=user)
+                    removals.append(d)
+            defer.DeferredList(removals).addCallback(self._cbUserCall)
+        return defer.succeed(None)
 
     def receiveRemote(self, message):
         """
@@ -141,20 +238,63 @@ class ShardedGroup(Group):
         defer.DeferredList(recipients).addCallback(self._cbUserCall)
         return defer.succeed(None)
 
+    def iterusers(self):
+        return iter(self.users.values())
 
-class ShardedRealm(WordsRealm):
+    def setMetadata(self, meta):
+        self.ctx.db.setGroupMeta(self.name, meta)
+
+        self.meta = meta
+
+        sets = []
+
+        for user in self.users.itervalues():
+            d = defer.maybeDeferred(user.groupMetaUpdate, self, meta)
+            d.addErrback(self._ebUserCall, p=user)
+            sets.append(d)
+        defer.DeferredList(sets).addCallback(self._cbUserCall)
+        return defer.succeed(None)
+
+    def size(self):
+        return defer.succeed(len(self.users))
+
+
+class ShardedRealm(object):
+    implements(portal.IRealm, iwords.IChatService)
+
+    _encoding = "utf8"
+
+    createUserOnRequest = True
+    createGroupOnRequest = False
+
     """
-    A realm which may exist in a sharded state on different
+    A realm which may exist in a sharded state across different
     servers. It works with :class:`ircdd.server.ShardedUser` and
     :class:`ircdd.server.ShardedGroup` and handles operations on those
     both for the local shard and the common state in the database.
+    It represents both the local view of the cumulative realm state
+    (all server nodes, everywhere) and the local scope (users connected
+    to the local instance).
+    It subscribes to groups on behalf of the locally connected users
+    and performs message relaying to the latter.
     """
-    def __init__(self, ctx, *a, **kw):
-        super(ShardedRealm, self).__init__(*a, **kw)
+    def __init__(self, ctx, name):
+        # The shard's name
+        self.name = name
+
         self.ctx = ctx
+
         self.createUserOnRequest = ctx["user_on_request"]
         self.createGroupOnRequest = ctx["group_on_request"]
+
+        # Users contains both local users (ShardedUser + IRCDDUser)
+        # and proxies of remote users (ShardedUser + ProxyIRCDDUser)
         self.users = {}
+
+        # Groups contain proxies to groups that the local users are
+        # interested in. The group state and meta found in the DB
+        # are the authoritative versions of the data.
+        # The local ShardedGroup serves as a local relay and cache.
         self.groups = {}
 
     def userFactory(self, name):
@@ -162,6 +302,32 @@ class ShardedRealm(WordsRealm):
 
     def groupFactory(self, name):
         return ShardedGroup(self.ctx, name)
+
+    def logoutFactory(self, avatar, facet):
+        def logout():
+            getattr(facet, "logout", lambda: None)()
+            avatar.realm = avatar.mind = None
+
+        return logout
+
+    def requestAvatar(self, avatarId, mind, *interfaces):
+        if isinstance(avatarId, str):
+            avatarId = avatarId.decode(self._encoding)
+
+        def gotAvatar(avatar):
+            if avatar.realm is not None:
+                raise ewords.AlreadyLoggedIn()
+
+            for iface in interfaces:
+                facet = iface(avatar, None)
+                if facet is not None:
+                    avatar.loggedIn(self, mind)
+                    mind.name = avatarId
+                    mind.realm = self
+                    mind.avatar = avatar
+                    return iface, facet, self.logoutFactory(avatar, facet)
+            raise NotImplementedError(self, interfaces)
+        return self.getUser(avatarId).addCallback(gotAvatar)
 
     def itergroups(self):
         # TODO: Integrate database.

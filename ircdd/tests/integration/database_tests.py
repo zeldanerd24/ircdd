@@ -208,8 +208,8 @@ class TestIRCDDatabase():
             heartbeat_data["user_heartbeats"]["test_user"]
 
     def test_removeUserFromGroup(self):
-        self.db.removeUserFromGroup("test_user", "test_group")
-        result = self.db.removeUserSession("test_user", "test_group")
+        self.db.heartbeatUserInGroup("test_user", "test_group")
+        result = self.db.removeUserFromGroup("test_user", "test_group")
 
         assert result["replaced"] == 1
 

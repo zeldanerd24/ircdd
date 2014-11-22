@@ -58,7 +58,7 @@ class TestShardedUser:
     def test_userHeartbeats(self):
         self.shardedUser.loggedIn(self.ctx.realm, None)
 
-        hb = r.db(integration.DB).table("user_presence").get(
+        hb = r.db(integration.DB).table("user_sessions").get(
             "john"
         ).run(self.conn)
 
@@ -66,8 +66,8 @@ class TestShardedUser:
         assert hb.get("last_heartbeat")
         assert hb.get("last_heartbeat") != ""
 
-        self.ctx.db.heartbeatUserPresence("john")
-        hb2 = r.db(integration.DB).table("user_presence").get(
+        self.ctx.db.heartbeatUserSession("john")
+        hb2 = r.db(integration.DB).table("user_sessions").get(
             "john"
         ).run(self.conn)
 
@@ -77,12 +77,12 @@ class TestShardedUser:
 
         assert hb.get("last_heartbeat") != hb2.get("last_heartbeat")
 
-    def test_userGroupHeartbeats(self):
+    def test_userInGroupHeartbeats(self):
         group = ShardedGroup(self.ctx, "test_group")
 
         self.shardedUser.join(group)
 
-        hb = r.db(integration.DB).table("group_presence").get(
+        hb = r.db(integration.DB).table("group_states").get(
             "test_group"
         ).run(self.conn)
 

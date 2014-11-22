@@ -94,14 +94,22 @@ class IRCDDatabase:
             }).run(self.conn)
 
     def observeGroupState(self, group):
+        conn = r.connect(db=self.db,
+                         host=self.rdb_host,
+                         port=self.rdb_port)
+
         return r.table(self.GROUP_STATES_TABLE).changes().filter(
             r.row["old_val"]["id"] == group or r.row["new_val"]["id"] == group
-        ).run(self.conn)
+        ).run(conn)
 
     def observeGroupMeta(self, group):
-        return r.table(self.GROUP_TABLE).changes().filter(
+        conn = r.connect(db=self.db,
+                         host=self.rdb_host,
+                         port=self.rdb_port)
+
+        return r.table(self.GROUPS_TABLE).changes().filter(
             r.row["old_val"]["id"] == group or r.row["new_val"]["id"] == group
-        ).run(self.conn)
+        ).run(conn)
 
     def lookupUser(self, nickname):
         """
@@ -185,7 +193,11 @@ class IRCDDatabase:
                 "name": name,
                 "owner": owner,
                 "type": channelType,
-                "topic": {},
+                "topic": {
+                    "topic": "",
+                    "topic_author": "",
+                    "topic_time": r.now()
+                },
                 "messages": []
             }).run(self.conn)
         else:
@@ -199,6 +211,11 @@ class IRCDDatabase:
         return r.table(self.GROUPS_TABLE).get(
             name
             ).run(self.conn)
+
+    def getGroupState(self, name):
+        return r.table(self.GROUP_STATES_TABLE).get(
+            name
+        ).run(self.conn)
 
     def listGroups(self):
         """
