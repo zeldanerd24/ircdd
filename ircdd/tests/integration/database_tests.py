@@ -85,7 +85,7 @@ class TestIRCDDatabase():
         assert channel['name'] == 'test_channel'
         assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
-        assert channel['topic'] == {}
+        assert channel['topic'] != {}
         assert channel['messages'] == []
 
     def test_deleteGroup(self):
@@ -94,7 +94,7 @@ class TestIRCDDatabase():
         assert channel['name'] == 'test_channel'
         assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
-        assert channel['topic'] == {}
+        assert channel['topic'] != {}
         assert channel['messages'] == []
         self.db.deleteGroup('test_channel')
         channel = self.db.lookupGroup('test_channel')
@@ -106,7 +106,7 @@ class TestIRCDDatabase():
         assert channel['name'] == 'test_channel'
         assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
-        assert channel['topic'] == {}
+        assert channel['topic'] != {}
         assert channel['messages'] == []
         self.db.setGroupTopic('test_channel', 'test', '1:23', 'author')
         channel = self.db.lookupGroup('test_channel')
@@ -139,7 +139,7 @@ class TestIRCDDatabase():
         assert channel['name'] == 'test_channel'
         assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
-        assert channel['topic'] == {}
+        assert channel['topic'] != {}
         assert channel['messages'][0]['sender'] == sender
         assert channel['messages'][0]['time'] == timestamp
         assert channel['messages'][0]['text'] == text

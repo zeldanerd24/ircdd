@@ -32,9 +32,16 @@ class ShardedUser(object):
         self.heartbeat_groups = task.LoopingCall(self._hbGroupPresence)
 
     def _hbPresence(self):
+        """
+        Sends a hearbeat to the user's session document.
+        """
         self.ctx.db.heartbeatUserSession(self.name)
 
     def _hbGroupPresence(self):
+        """
+        Sends heartbeats to all the groups that this user is a part of
+        in order to maintain presence in them.
+        """
         for group in self.groups:
             self.ctx.db.heartbeatUserInGroup(self.name, group.name)
 
@@ -172,7 +179,12 @@ class ShardedGroup(object):
                                       changeset.conn.close,
                                       False)
         for change in changeset:
-            reactor.callFromThread(log.msg("Change %s:" % str(change)))
+            if change.get("new_val"):
+                self.meta = {
+                    "topic": change["new_val"]["topic"],
+                    "topic_author": change["new_val"]["topic_author"]
+                }
+
 
     def add(self, added_user):
         assert iwords.IChatClient.providedBy(added_user), \
