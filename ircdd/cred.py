@@ -31,14 +31,29 @@ class DatabaseCredentialsChecker:
     def requestAvatarId(self, credentials):
         user = self.ctx["db"].lookupUser(credentials.username)
         if user:
-            if user['registered'] is False:
-                return str(credentials.username)
-            else:
+            session = self.ctx.db.lookupUserSession(credentials.username)
+            # If the session is active, fail - another user is connected
+            # under these credentials. TODO: Add TTL
+            if session:
+                return defer.fail(error.UnauthorizedLogin())
+
+            # Registered user, session expired -> check password
+            if user["registered"]:
                 return defer.maybeDeferred(
                     credentials.checkPassword,
-                    user['password']).addCallback(
-                    self._cbPasswordMatch, str(credentials.username))
-        else:
+                    user["password"]).addCallback(
+                        self._cbPasswordMatch, str(credentials.username))
+            # Anonymous user, session expired (connection dropped hard) ->
+            # grant login
+            elif not user["registered"]:
+                return str(credentials.username)
+            else:
+                defer.fail(error.UnauthorizedLogin())
+
+        # User entry not found, check if we can create an anonymous
+        elif self.ctx.user_on_request:
             # this may need to be changed if we use encrypted credentials
             self.addUser(credentials.username)
-            return self.requestAvatarId(credentials)
+            return str(credentials.username)
+        else:
+            return defer.fail(error.UnauthorizedLogin())

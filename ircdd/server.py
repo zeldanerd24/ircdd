@@ -20,24 +20,25 @@ class ShardedUser(object):
     servers. It subscribes to its own topic on the message queue
     and sends/responds to remote messages.
     """
-    def __init__(self, ctx, name):
+    def __init__(self, ctx, name, mind=None):
         self.name = name
         self.groups = []
         self.lastMessage = time()
+        self.mind = mind
 
         self.ctx = ctx
         self.ctx["remote_rw"].subscribe(self.name, self.receiveRemote)
 
-        self.heartbeat = task.LoopingCall(self._hbPresence)
-        self.heartbeat_groups = task.LoopingCall(self._hbGroupPresence)
+        self.heartbeat = task.LoopingCall(self._hbSession)
+        self.heartbeat_groups = task.LoopingCall(self._hbGroupSession)
 
-    def _hbPresence(self):
+    def _hbSession(self):
         """
         Sends a hearbeat to the user's session document.
         """
         self.ctx.db.heartbeatUserSession(self.name)
 
-    def _hbGroupPresence(self):
+    def _hbGroupSession(self):
         """
         Sends heartbeats to all the groups that this user is a part of
         in order to maintain presence in them.
@@ -64,6 +65,7 @@ class ShardedUser(object):
 
         message["sender"] = dict(name=self.name, hostname=self.ctx["hostname"])
         message["recipient"] = recipient.name
+        message["type"] = "privmsg"
 
         self.ctx.remote_rw.publish(recipient.name, message)
         self.lastMessage = time()
@@ -89,7 +91,7 @@ class ShardedUser(object):
         self.mind = mind
         self.signOn = time()
 
-        self._hbPresence()
+        self._hbSession()
 
         self.heartbeat.start(10.0)
         self.heartbeat_groups.start(10.0)
@@ -106,7 +108,7 @@ class ShardedUser(object):
     def join(self, group):
         def cbJoin(result):
             self.groups.append(group)
-            self._hbGroupPresence()
+            self._hbGroupSession()
             return result
 
         return group.add(self.mind).addCallback(cbJoin)
@@ -130,6 +132,8 @@ class ShardedGroup(object):
     def __init__(self, ctx, name):
         self.name = name
         self.users = {}
+        self.local_sessions = {}
+        self.meta = {"topic": "", "topic_author": ""}
 
         self.ctx = ctx
         self.ctx.remote_rw.subscribe(self.name, self.receiveRemote)
@@ -260,7 +264,7 @@ class ShardedGroup(object):
 
         sets = []
 
-        for user in self.users.itervalues():
+        for user in self.local_sessions.itervalues():
             d = defer.maybeDeferred(user.groupMetaUpdate, self, meta)
             d.addErrback(self._ebUserCall, p=user)
             sets.append(d)
@@ -268,7 +272,7 @@ class ShardedGroup(object):
         return defer.succeed(None)
 
     def size(self):
-        return defer.succeed(len(self.users))
+        return defer.succeed(len(self.local_sessions))
 
 
 class ShardedRealm(object):
@@ -299,8 +303,6 @@ class ShardedRealm(object):
         self.createUserOnRequest = ctx["user_on_request"]
         self.createGroupOnRequest = ctx["group_on_request"]
 
-        # Users contains both local users (ShardedUser + IRCDDUser)
-        # and proxies of remote users (ShardedUser + ProxyIRCDDUser)
         self.users = {}
 
         # Groups contain proxies to groups that the local users are
@@ -470,10 +472,9 @@ class IRCDDUser(IRCUser):
         :param message: A message dictionary. If remote, the message will
         contain additional metadata.
         """
-        # This is an ugly hack and needs to be fixed. Maybe
-        # defining some serializable "shell" IRCUser that can
-        # be passed around with the NSQ messages?
-
+        # This is an ugly hack from the Twisted codebase.
+        # No idea why it has to be like this but I am too scared
+        # to try and fix it
         if iwords.IGroup.providedBy(recipient):
             recipient_name = "#" + recipient.name
         else:

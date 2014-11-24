@@ -120,6 +120,11 @@ class IRCDDatabase:
             nickname
             ).run(self.conn)
 
+    def lookupUserSession(self, nickname):
+        return r.table(self.USER_SESSIONS_TABLE).get(
+            nickname
+        ).run(self.conn)
+
     def registerUser(self, nickname, email, password):
         """
         Finds unregistered user with same nickname and registers them with
