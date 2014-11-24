@@ -80,13 +80,21 @@ class ShardedUser(object):
         contains the IRC message and metadata in its parsed body.
         """
         parsed_msg = message.parsed_msg
+        msg_type = parsed_msg["msg_body"]["type"]
 
-        self.mind.receive(parsed_msg["msg_body"]["sender"]["name"],
-                          self, parsed_msg["msg_body"])
+        if msg_type == "privmsg":
+            self.mind.receive(parsed_msg["msg_body"]["sender"]["name"],
+                              self, parsed_msg["msg_body"])
 
         message.finish()
 
     def loggedIn(self, realm, mind):
+        """
+        Associates this ShardedUser with a client connection
+        and starts to heartbeat the user's session and group
+        subscription,
+        completing the login process.
+        """
         self.realm = realm
         self.mind = mind
         self.signOn = time()
@@ -97,6 +105,10 @@ class ShardedUser(object):
         self.heartbeat_groups.start(10.0)
 
     def logout(self):
+        """
+        Stops maintaining the sessions and cleans them,
+        completing the logout process
+        """
         self.heartbeat.stop()
         self.heartbeat_groups.stop()
 
@@ -106,6 +118,11 @@ class ShardedUser(object):
         self.ctx.db.removeUserSession(self.name)
 
     def join(self, group):
+        """
+        Joins the desired group (if possible) and
+        adds this user session to the group's
+        users.
+        """
         def cbJoin(result):
             self.groups.append(group)
             self._hbGroupSession()
@@ -114,6 +131,10 @@ class ShardedUser(object):
         return group.add(self.mind).addCallback(cbJoin)
 
     def leave(self, group, reason=None):
+        """
+        Leaves the group, stops maintaining presence in it, and
+        cleans out the session.
+        """
         def cbLeave(result):
             self.groups.remove(group)
             self.ctx.db.removeUserFromGroup(self.name, group.name)
@@ -154,29 +175,46 @@ class ShardedGroup(object):
                 self.remove(user, err.getErrorMessage())
 
     def getGroupMeta(self):
+        """
+        Gets the group's metadata from `RDB` and
+        populates the local structure with it.
+        """
         meta = self.ctx.db.lookupGroup(self.name)
         if meta:
-            self.meta = {
-                "topic": meta["topic"]["topic"],
-                "topic_author": meta["topic"]["topic_author"]
-            }
+            self.meta = meta["topic"]
 
     def getGroupState(self):
+        """
+        Gets the groups state from `RDB` and
+        populates the local shard with it.
+        """
         state = self.ctx.db.getGroupState(self.name)
         if state:
-            for user, hb in state["user_heartbeats"]:
-                self.add(ShardedUser(user))
+            self.users = state["user_heartbeats"]
 
     def _observeGroupState(self):
+        """
+        Continuously processes the stream of changes
+        to the group's state.
+        In order to join with the reactor thread on
+        SIGINT, a callback forcefully closes the
+        changeset's connection.
+        """
         changeset = self.ctx.db.observeGroupState(self.name)
 
         reactor.addSystemEventTrigger("before", "shutdown",
                                       changeset.conn.close,
                                       False)
         for change in changeset:
-            log.msg("Change %s" % str(change))
+            self.users = change["new_val"]["user_heartbeats"]
 
     def _observeGroupMeta(self):
+        """
+        Continuously processes the stream of changes to the
+        group's metadata.
+        In order to join with the reactor thread on SIGINT
+        a callback forcefully closes the changeset's connection.
+        """
         changeset = self.ctx.db.observeGroupMeta(self.name)
 
         reactor.addSystemEventTrigger("before", "shutdown",
@@ -189,43 +227,84 @@ class ShardedGroup(object):
                     "topic_author": change["new_val"]["topic_author"]
                 }
 
-
     def add(self, added_user):
+        """
+        Adds a user to this shard as a local session.
+        Notifies all other active local users and posts a
+        message on the group's topic to notify remote users.
+        """
         assert iwords.IChatClient.providedBy(added_user), \
             "%r is not a chat client" % (added_user,)
 
-        if added_user.name not in self.users:
-            additions = []
-            self.users[added_user.name] = added_user
-            for user in self.users.itervalues():
-                if user is not added_user:
-                    d = defer.maybeDeferred(user.userJoined, self, added_user)
-                    d.addErrback(self._ebUserCall, p=user)
-                    additions.append(d)
+        if added_user.name not in self.local_sessions:
+            self.local_sessions[added_user.name] = added_user
+            self.notifyAdd(added_user)
+            self.notifyShardsAdd(added_user.name)
 
-            defer.DeferredList(additions).addCallback(self._cbUserCall)
         return defer.succeed(None)
 
+    def notifyShardsAdd(self, added_user_name):
+        """
+        Submits a `join` message on this group's topic,
+        notifying remote shards of the event so that they
+        can in turn relay it to their users.
+        """
+        message = {"type": "join", "user": added_user_name}
+        self.ctx.remote_rw.publish(self.name, message)
+
+    def notifyAdd(self, added_user):
+        """
+        Notify the local users of a `join` event.
+        """
+        additions = []
+        for user in self.local_sessions.itervalues():
+            if user.name != added_user.name:
+                d = defer.maybeDeferred(user.userJoined, self, added_user)
+                d.addErrback(self._ebUserCall, p=user)
+                additions.append(d)
+        defer.DeferredList(additions).addCallback(self._cbUserCall)
+
     def remove(self, removed_user, reason=None):
+        """
+        Remove a local user from the group.
+        """
         assert reason is None or isinstance(reason, unicode)
 
         try:
-            del self.users[removed_user.name]
+            del self.local_sessions[removed_user.name]
         except KeyError:
             log.err("Removing user %s failed: user does not exist" %
                     removed_user.name)
         else:
-            removals = []
-            for user in self.users.itervalues():
-                if user is not removed_user:
-                    d = defer.maybeDeferred(user.userLeft,
-                                            self,
-                                            removed_user,
-                                            reason)
-                    d.addErrback(self._ebUserCall, p=user)
-                    removals.append(d)
-            defer.DeferredList(removals).addCallback(self._cbUserCall)
+            self.notifyRemove(removed_user.name, reason)
+            self.notifyShardsRemove(removed_user.name, reason)
         return defer.succeed(None)
+
+    def notifyRemove(self, removed_user_name, reason=None):
+        """
+        Notify the local users of a `part` event.
+        """
+        removals = []
+        for user in self.local_sessions.itervalues():
+            if user.name != removed_user_name:
+                d = defer.maybeDeferred(user.userLeft,
+                                        self,
+                                        removed_user_name,
+                                        reason)
+                d.addErrback(self._ebUserCall, p=user)
+                removals.append(d)
+        defer.DeferredList(removals).addCallback(self._cbUserCall)
+
+    def notifyShardsRemove(self, removed_user_name, reason=None):
+        message = {
+            "type": "part",
+            "user": {
+                "name": removed_user_name,
+                "hostname": self.ctx.hostname
+            },
+            "reason": reason
+        }
+        self.ctx.remote_rw.publish(self.name, message)
 
     def receiveRemote(self, message):
         """
@@ -236,26 +315,37 @@ class ShardedGroup(object):
         the IRC message and metadata in its parsed_body.
         """
         parsed_msg = message.parsed_msg
-        self.receive(parsed_msg["msg_body"]["sender"],
-                     self,
-                     parsed_msg.get("msg_body", None))
+        msg_type = parsed_msg["msg_body"]["type"]
+
+        if msg_type == "privmsg":
+            self.receive(parsed_msg["msg_body"]["sender"],
+                         self,
+                         parsed_msg.get("msg_body", None))
+        elif msg_type == "join":
+            self.notifyAdd(parsed_msg["user"])
+        elif msg_type == "part":
+            self.notifyRemove(parsed_msg["user"], parsed_msg["reason"])
+
         message.finish()
 
     def receive(self, sender_name, recipient, message):
+        """
+        Multicasts the message to all local users.
+        """
         assert recipient is self
         recipients = []
 
-        for recipient in self.users.itervalues():
+        for recipient in self.local_sessions.itervalues():
             if recipient.name != sender_name:
                 d = defer.maybeDeferred(recipient.receive, sender_name,
-                                        self.name, message)
+                                        self, message)
                 d.addErrback(self._ebUserCall, p=recipient)
                 recipients.append(d)
         defer.DeferredList(recipients).addCallback(self._cbUserCall)
         return defer.succeed(None)
 
     def iterusers(self):
-        return iter(self.users.values())
+        return iter(self.local_sessions.values())
 
     def setMetadata(self, meta):
         self.ctx.db.setGroupMeta(self.name, meta)
@@ -366,17 +456,32 @@ class ShardedRealm(object):
         return defer.succeed(group)
 
     def lookupUser(self, name):
-        # TODO: Integrate database.
+        """
+        Looks for the given user first in the local store and
+        failing that in the database. If found in the databse,
+        checks the session for validity - if the session is valid
+        the user must be connected to some other node, so a ShardedUser
+        with a ProxyIRCDDUser for mind is returned. If the session is
+        not valid, fail with NoSuchUser.
+        """
         assert isinstance(name, unicode)
         name = name.lower()
-        # Lookup in database also? Not sure what this
-        # method does
-        try:
-            user = self.users[name]
-        except KeyError:
-            return defer.fail(failure.Failure(ewords.NoSuchUser(name)))
-        else:
-            return defer.succeed(user)
+
+        local_user = self.users.get(name)
+        if local_user:
+            return defer.succeed(local_user)
+
+        remote_user = self.ctx.db.lookupUser(name)
+        user_session = self.ctx.db.lookupUserSession(name)
+
+        # User exists and session is active, so he must be
+        # connected to some remote
+        if remote_user and user_session:
+            return defer.succeed(ShardedUser(self.ctx,
+                                             name,
+                                             ProxyIRCDDUser(self.ctx, name)))
+
+        return defer.fail(failure.Failure(ewords.NoSuchUser(name)))
 
     def lookupGroup(self, name):
         # TODO: Integrate database.
@@ -461,6 +566,24 @@ class ShardedRealm(object):
         return d
 
 
+class ProxyIRCDDUser():
+    """
+    Shell object that stands in place of a real client connection.
+    It is used when the lcoal node must operate on a ShardedUser
+    which is connected to a different node.
+    """
+    def __init__(self, ctx, name):
+        self.ctx = ctx
+        self.name = name
+
+    def receive(self, sender_name, recipient, message):
+        """
+        The remote client will process the message via NSQ, so this
+        method just logs the fact that the proxy was hit.
+        """
+        log.msg("Proxy received message %s" % str(message))
+
+
 class IRCDDUser(IRCUser):
     def receive(self, sender_name, recipient, message):
         """
@@ -487,6 +610,21 @@ class IRCDDUser(IRCUser):
                                        sender_name,
                                        self.hostname),
                          recipient_name, L)
+
+    def userJoined(self, group, user):
+        # Stupid workaround the fact that this method expects (and receives)
+        # the FULL IRCUser object, even though it clearly needs
+        # only the username... So in order to pass it the username
+        # from a remote message, it has to also handle reciving dicts.
+        if isinstance(user, dict):
+            user_name = user["name"]
+            user_hostname = user["hostname"]
+        else:
+            user_name = user.name
+            user_hostname = user.hostname
+        self.join(
+            "%s!%s@%s" % (user_name, user_name, user_hostname),
+            "#" + group.name)
 
 
 class IRCDDFactory(protocol.ServerFactory):

@@ -1,4 +1,5 @@
 from zope.interface import implements
+from twisted.words import ewords
 from twisted.cred import checkers, error, credentials
 from twisted.python import failure
 from twisted.internet import defer
@@ -35,7 +36,7 @@ class DatabaseCredentialsChecker:
             # If the session is active, fail - another user is connected
             # under these credentials. TODO: Add TTL
             if session:
-                return defer.fail(error.UnauthorizedLogin())
+                return defer.fail(ewords.AlreadyLoggedIn())
 
             # Registered user, session expired -> check password
             if user["registered"]:

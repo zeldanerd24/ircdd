@@ -249,20 +249,20 @@ class TestIRCDDAuth:
 
         response = self.getResponse()
         assert response == expected
+
         self.protocol.irc_PASS("", ["password"])
         self.protocol.irc_NICK("", ["anonuser"])
 
-        expected_fail = [('testserver', '375',
-                         ['anonuser', '- testserver Message of the Day - ']),
-                         ('testserver', '376',
-                         ['anonuser', 'End of /MOTD command.']),
-                         ('NickServ!NickServ@services', 'PRIVMSG',
-                         ['anonuser',
-                          'Already logged in.  No pod people allowed!'])]
-
+        expected = [('testserver', '375',
+                     ['anonuser', '- testserver Message of the Day - ']),
+                    ('testserver', '376',
+                     ['anonuser', 'End of /MOTD command.']),
+                    ('NickServ!NickServ@services', 'PRIVMSG',
+                     ['anonuser', 'Already logged in.  No pod people allowed!']
+                     )]
         response_fail = self.getResponse()
 
-        assert response_fail == expected_fail
+        assert response_fail == expected
 
     def test_registered_login_pw_fail(self):
         self.protocol.irc_PASS("", ["bad_password"])
