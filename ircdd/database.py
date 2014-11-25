@@ -12,6 +12,8 @@ class IRCDDatabase:
 
     USERS_TABLE = 'users'
     GROUPS_TABLE = 'groups'
+    USER_SESSIONS_TABLE = 'user_sessions'
+    GROUP_STATES_TABLE = 'group_states'
 
     def __init__(self, db="ircdd", host="127.0.0.1", port=28015):
         self.rdb_host = host
@@ -47,6 +49,68 @@ class IRCDDatabase:
         else:
             log.err("User already exists: %s" % nickname)
 
+    def heartbeatUserSession(self, nickname):
+        presence = r.table(self.USER_SESSIONS_TABLE).get(
+            nickname
+        ).run(self.conn)
+
+        if not presence:
+            return r.table(self.USER_SESSIONS_TABLE).insert({
+                "id": nickname,
+                "last_heartbeat": r.now(),
+            }).run(self.conn)
+        else:
+            return r.table(self.USER_SESSIONS_TABLE).get(nickname).update({
+                "last_heartbeat": r.now()
+            }).run(self.conn)
+
+    def removeUserSession(self, nickname):
+        return r.table(self.USER_SESSIONS_TABLE).get(
+            nickname
+        ).delete().run(self.conn)
+
+    def removeUserFromGroup(self, nickname, group):
+        return r.table(self.GROUP_STATES_TABLE).get(group).replace(
+            r.row.without({"user_heartbeats": {nickname: True}})
+        ).run(self.conn)
+
+    def heartbeatUserInGroup(self, nickname, group):
+        presence = r.table(self.GROUP_STATES_TABLE).get(
+            group
+        ).run(self.conn)
+
+        if not presence:
+            return r.table(self.GROUP_STATES_TABLE).insert({
+                "id": group,
+                "user_heartbeats": {
+                    nickname: r.now()
+                }
+            }).run(self.conn)
+        else:
+            return r.table(self.GROUP_STATES_TABLE).get(group).update({
+                "user_heartbeats": r.row["user_heartbeats"].merge({
+                    nickname: r.now()
+                })
+            }).run(self.conn)
+
+    def observeGroupState(self, group):
+        conn = r.connect(db=self.db,
+                         host=self.rdb_host,
+                         port=self.rdb_port)
+
+        return r.table(self.GROUP_STATES_TABLE).changes().filter(
+            r.row["old_val"]["id"] == group or r.row["new_val"]["id"] == group
+        ).run(conn)
+
+    def observeGroupMeta(self, group):
+        conn = r.connect(db=self.db,
+                         host=self.rdb_host,
+                         port=self.rdb_port)
+
+        return r.table(self.GROUPS_TABLE).changes().filter(
+            r.row["old_val"]["id"] == group or r.row["new_val"]["id"] == group
+        ).run(conn)
+
     def lookupUser(self, nickname):
         """
         Finds the user with given nickname and returns the dict for it
@@ -55,6 +119,11 @@ class IRCDDatabase:
         return r.table(self.USERS_TABLE).get(
             nickname
             ).run(self.conn)
+
+    def lookupUserSession(self, nickname):
+        return r.table(self.USER_SESSIONS_TABLE).get(
+            nickname
+        ).run(self.conn)
 
     def registerUser(self, nickname, email, password):
         """
@@ -124,12 +193,16 @@ class IRCDDatabase:
             ).run(self.conn)
 
         if not exists:
-            r.table(self.GROUPS_TABLE).insert({
+            return r.table(self.GROUPS_TABLE).insert({
                 "id": name,
                 "name": name,
                 "owner": owner,
                 "type": channelType,
-                "topic": {},
+                "topic": {
+                    "topic": "",
+                    "topic_author": "",
+                    "topic_time": r.now()
+                },
                 "messages": []
             }).run(self.conn)
         else:
@@ -143,6 +216,11 @@ class IRCDDatabase:
         return r.table(self.GROUPS_TABLE).get(
             name
             ).run(self.conn)
+
+    def getGroupState(self, name):
+        return r.table(self.GROUP_STATES_TABLE).get(
+            name
+        ).run(self.conn)
 
     def listGroups(self):
         """
@@ -165,7 +243,7 @@ class IRCDDatabase:
         Set the IRC channel's topic
         """
 
-        r.table(self.GROUPS_TABLE).get(name).update({
+        return r.table(self.GROUPS_TABLE).get(name).update({
             "topic": {
                 "topic": topic,
                 "topic_time": topic_time,
@@ -195,8 +273,8 @@ class IRCDDatabase:
         valid_email = re.compile(
             r"(^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$)")
 
-        if valid_email.match(email) is None:
-            print "Invalid Email Address"
+        if not valid_email.match(email):
+            log.error("Invalid email: %s" % email)
             raise ValueError(email)
 
     def checkIfValidNickname(self, nickname):
@@ -210,8 +288,8 @@ class IRCDDatabase:
         valid_nickname = re.compile(
             r"^(?i)[a-z0-9_-]{%s,%s}$" % (min_len, max_len))
 
-        if valid_nickname.match(nickname) is None:
-            print "Invalid nickname"
+        if not valid_nickname.match(nickname):
+            log.error("Invalid nick: %s" % nickname)
             raise ValueError(nickname)
 
     def checkIfValidPassword(self, password):
@@ -225,8 +303,8 @@ class IRCDDatabase:
         valid_password = re.compile(
             r"^(?i)[a-z0-9_-]{%s,%s}$" % (min_len, max_len))
 
-        if valid_password.match(password) is None:
-            print "Invalid password"
+        if not valid_password.match(password):
+            log.error("Invalid password: %s" % password)
             raise ValueError(password)
 
     def privateMessage(self, sender, receiver, time, message):

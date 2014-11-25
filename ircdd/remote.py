@@ -3,7 +3,6 @@ import json
 import requests
 from requests.exceptions import ConnectionError, Timeout
 from twisted.python import log
-from twisted.internet import reactor
 
 
 def _create_topic(topic, lookupd_http_addresses):
@@ -195,8 +194,7 @@ class RemoteReadWriter(object):
         self._lookupd_addresses = lookupd_addresses
         self._server_name = server_name
 
-        # Defer the writer's start for later
-        reactor.callLater(1, self._start_writer)
+        self._start_writer()
 
     def _start_writer(self):
         self._writer = nsq.Writer(self._nsqd_addresses,
