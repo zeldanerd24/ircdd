@@ -4,7 +4,7 @@ import yaml
 from twisted import copyright
 from twisted.cred import portal
 
-from ircdd.server import ShardedRealm
+from ircdd.realm import ShardedRealm
 from ircdd import cred
 from ircdd.remote import RemoteReadWriter
 from ircdd import database
