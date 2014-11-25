@@ -173,7 +173,7 @@ class IRCDDatabase:
                     })
             }).run(self.conn)
 
-    def createGroup(self, name, owner, channelType):
+    def createGroup(self, name, channelType):
         """
         Create an IRC channel (if it doesn't exist yet) in the channels table
         Fields for the channels table are:
@@ -185,7 +185,6 @@ class IRCDDatabase:
         message time, message author, and message contents
         """
         assert name
-        assert owner
         assert channelType
 
         exists = r.table(self.GROUPS_TABLE).get(
@@ -196,7 +195,6 @@ class IRCDDatabase:
             return r.table(self.GROUPS_TABLE).insert({
                 "id": name,
                 "name": name,
-                "owner": owner,
                 "type": channelType,
                 "topic": {
                     "topic": "",
@@ -227,7 +225,9 @@ class IRCDDatabase:
         Returns an array of all IRC channel names present in the database
         """
 
-        return list(r.table(self.CHANNEL_TABLE).pluck("name").run(self.conn))
+        return list(r.table(self.CHANNEL_TABLE).filter(
+            {"type": "public"}
+        ).pluck("name").run(self.conn))
 
     def deleteGroup(self, name):
         """
@@ -320,6 +320,6 @@ class IRCDDatabase:
         name = list[0] + ":" + list[1]
 
         if not self.lookupGroup(name):
-            self.createGroup(name, 'owner', 'private')
+            self.createGroup(name, 'private')
 
         self.addMessage(name, sender, time, message)

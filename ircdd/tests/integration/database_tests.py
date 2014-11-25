@@ -80,19 +80,17 @@ class TestIRCDDatabase():
         assert user['permissions']['test_channel'] == ['+s']
 
     def test_createGroup(self):
-        self.db.createGroup('test_channel', 'owner', 'public')
+        self.db.createGroup('test_channel', 'public')
         channel = self.db.lookupGroup('test_channel')
         assert channel['name'] == 'test_channel'
-        assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
         assert channel['topic'] != {}
         assert channel['messages'] == []
 
     def test_deleteGroup(self):
-        self.db.createGroup('test_channel', 'owner', 'public')
+        self.db.createGroup('test_channel', 'public')
         channel = self.db.lookupGroup('test_channel')
         assert channel['name'] == 'test_channel'
-        assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
         assert channel['topic'] != {}
         assert channel['messages'] == []
@@ -101,10 +99,9 @@ class TestIRCDDatabase():
         assert channel is None
 
     def test_setGroupData(self):
-        self.db.createGroup('test_channel', 'owner', 'public')
+        self.db.createGroup('test_channel', 'public')
         channel = self.db.lookupGroup('test_channel')
         assert channel['name'] == 'test_channel'
-        assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
         assert channel['topic'] != {}
         assert channel['messages'] == []
@@ -115,7 +112,7 @@ class TestIRCDDatabase():
         assert channel['topic']['topic_author'] == 'author'
 
     def test_addMessage(self):
-        self.db.createGroup('test_channel', 'owner', 'public')
+        self.db.createGroup('test_channel', 'public')
 
         sender = "test_user"
         timestamp = "2014-10-15 10:14:51"
@@ -137,7 +134,6 @@ class TestIRCDDatabase():
 
         channel = self.db.lookupGroup('test_channel')
         assert channel['name'] == 'test_channel'
-        assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
         assert channel['topic'] != {}
         assert channel['messages'][0]['sender'] == sender

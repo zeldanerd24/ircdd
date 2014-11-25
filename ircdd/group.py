@@ -208,7 +208,7 @@ class ShardedGroup(object):
         return defer.succeed(None)
 
     def iterusers(self):
-        return iter(self.local_sessions.values())
+        return iter(self.users.keys())
 
     def setMetadata(self, meta):
         self.ctx.db.setGroupMeta(self.name, meta)

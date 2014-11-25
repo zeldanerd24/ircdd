@@ -133,15 +133,15 @@ class ShardedRealm(object):
         assert isinstance(name, unicode)
         name = name.lower()
 
-        # lookup in self, then database.
-        # if found in database but not self,
-        # create in db and add to self before returning
-        try:
-            group = self.groups[name]
-        except KeyError:
-            return defer.fail(failure.Failure(ewords.NoSuchGroup(name)))
-        else:
+        group = self.groups.get(name)
+        if group:
             return defer.succeed(group)
+
+        group = self.ctx.db.lookupGroup(name)
+        if group:
+            return defer.succeed(self.groupFactory(name))
+
+        return defer.fail(failure.Failure(ewords.NoSuchGroup(name)))
 
     def getGroup(self, name):
         # TODO: Integrate database.
@@ -179,6 +179,7 @@ class ShardedRealm(object):
 
         def ebLookup(err):
             err.trap(ewords.NoSuchGroup)
+            self.ctx.db.createGroup(name, "public")
             return self.groupFactory(name)
 
         name = name.lower()
