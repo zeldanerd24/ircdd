@@ -3,7 +3,9 @@ import rethinkdb as r
 from twisted.test import proto_helpers
 from twisted.words.protocols import irc
 
-from ircdd.server import IRCDDFactory, ShardedUser, ShardedGroup
+from ircdd.user import ShardedUser
+from ircdd.group import ShardedGroup
+from ircdd.server import IRCDDFactory
 from ircdd.remote import _channels, _topics
 from ircdd.remote import _delete_channel, _delete_topic
 from ircdd.context import makeContext
