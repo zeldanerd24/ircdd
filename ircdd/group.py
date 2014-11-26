@@ -22,11 +22,11 @@ class ShardedGroup(object):
         self.ctx = ctx
         self.ctx.remote_rw.subscribe(self.name, self.receiveRemote)
 
-        self.getGroupMeta()
-        self.getGroupState()
+        self.getMeta()
+        self.getState()
 
-        threads.deferToThread(self._observeGroupMeta)
-        threads.deferToThread(self._observeGroupState)
+        threads.deferToThread(self._observeMeta)
+        threads.deferToThread(self._observeState)
 
     def _ebUserCall(self, err, p):
         return failure.Failure(Exception(p, err))
@@ -37,16 +37,16 @@ class ShardedGroup(object):
                 user, err = result.value
                 self.remove(user, err.getErrorMessage())
 
-    def getGroupMeta(self):
+    def getMeta(self):
         """
         Gets the group's metadata from `RDB` and
         populates the local structure with it.
         """
-        meta = self.ctx.db.lookupGroup(self.name)
-        if meta:
-            self.meta = meta["topic"]
+        group = self.ctx.db.lookupGroup(self.name)
+        if group:
+            self.updateMeta(group["topic"])
 
-    def getGroupState(self):
+    def getState(self):
         """
         Gets the groups state from `RDB` and
         populates the local shard with it.
@@ -55,7 +55,7 @@ class ShardedGroup(object):
         if state:
             self.users = state["user_heartbeats"]
 
-    def _observeGroupState(self):
+    def _observeState(self):
         """
         Continuously processes the stream of changes
         to the group's state.
@@ -68,10 +68,15 @@ class ShardedGroup(object):
         reactor.addSystemEventTrigger("before", "shutdown",
                                       changeset.conn.close,
                                       False)
-        for change in changeset:
-            self.users = change["new_val"]["user_heartbeats"]
 
-    def _observeGroupMeta(self):
+        def updateUserList(users):
+            self.users = users
+
+        for change in changeset:
+            reactor.callFromThread(updateUserList,
+                                   change["new_val"]["user_heartbeats"])
+
+    def _observeMeta(self):
         """
         Continuously processes the stream of changes to the
         group's metadata.
@@ -83,12 +88,11 @@ class ShardedGroup(object):
         reactor.addSystemEventTrigger("before", "shutdown",
                                       changeset.conn.close,
                                       False)
+
         for change in changeset:
             if change.get("new_val"):
-                self.meta = {
-                    "topic": change["new_val"]["topic"],
-                    "topic_author": change["new_val"]["topic_author"]
-                }
+                reactor.callFromThread(self.updateMeta,
+                                       change["new_val"]["topic"])
 
     def add(self, added_user):
         """
@@ -106,27 +110,6 @@ class ShardedGroup(object):
 
         return defer.succeed(None)
 
-    def notifyShardsAdd(self, added_user_name):
-        """
-        Submits a `join` message on this group's topic,
-        notifying remote shards of the event so that they
-        can in turn relay it to their users.
-        """
-        message = {"type": "join", "user": added_user_name}
-        self.ctx.remote_rw.publish(self.name, message)
-
-    def notifyAdd(self, added_user):
-        """
-        Notify the local users of a `join` event.
-        """
-        additions = []
-        for user in self.local_sessions.itervalues():
-            if user.name != added_user.name:
-                d = defer.maybeDeferred(user.userJoined, self, added_user)
-                d.addErrback(self._ebUserCall, p=user)
-                additions.append(d)
-        defer.DeferredList(additions).addCallback(self._cbUserCall)
-
     def remove(self, removed_user, reason=None):
         """
         Remove a local user from the group.
@@ -139,35 +122,9 @@ class ShardedGroup(object):
             log.err("Removing user %s failed: user does not exist" %
                     removed_user.name)
         else:
-            self.notifyRemove(removed_user.name, reason)
+            self.notifyRemove(removed_user, reason)
             self.notifyShardsRemove(removed_user.name, reason)
         return defer.succeed(None)
-
-    def notifyRemove(self, removed_user_name, reason=None):
-        """
-        Notify the local users of a `part` event.
-        """
-        removals = []
-        for user in self.local_sessions.itervalues():
-            if user.name != removed_user_name:
-                d = defer.maybeDeferred(user.userLeft,
-                                        self,
-                                        removed_user_name,
-                                        reason)
-                d.addErrback(self._ebUserCall, p=user)
-                removals.append(d)
-        defer.DeferredList(removals).addCallback(self._cbUserCall)
-
-    def notifyShardsRemove(self, removed_user_name, reason=None):
-        message = {
-            "type": "part",
-            "user": {
-                "name": removed_user_name,
-                "hostname": self.ctx.hostname
-            },
-            "reason": reason
-        }
-        self.ctx.remote_rw.publish(self.name, message)
 
     def receiveRemote(self, message):
         """
@@ -180,14 +137,17 @@ class ShardedGroup(object):
         parsed_msg = message.parsed_msg
         msg_type = parsed_msg["msg_body"]["type"]
 
+        log.msg("Received %s message %s" % (msg_type, parsed_msg))
+
         if msg_type == "privmsg":
-            self.receive(parsed_msg["msg_body"]["sender"],
+            self.receive(parsed_msg["msg_body"]["sender"]["name"],
                          self,
-                         parsed_msg.get("msg_body", None))
+                         parsed_msg.get("msg_body"))
         elif msg_type == "join":
-            self.notifyAdd(parsed_msg["user"])
+            self.notifyAdd(parsed_msg["msg_body"]["user"])
         elif msg_type == "part":
-            self.notifyRemove(parsed_msg["user"], parsed_msg["reason"])
+            self.notifyRemove(parsed_msg["msg_body"]["user"],
+                              parsed_msg["msg_body"]["reason"])
 
         message.finish()
 
@@ -196,6 +156,7 @@ class ShardedGroup(object):
         Multicasts the message to all local users.
         """
         assert recipient is self
+
         recipients = []
 
         for recipient in self.local_sessions.itervalues():
@@ -208,21 +169,112 @@ class ShardedGroup(object):
         return defer.succeed(None)
 
     def iterusers(self):
+        """
+        Returns the list of users connected to this
+        group across all instances. Since `users` is
+        a dict of username:timestamp, return just the
+        keys.
+        """
         return iter(self.users.keys())
 
     def setMetadata(self, meta):
-        self.ctx.db.setGroupMeta(self.name, meta)
+        """
+        Attempts to set the group meta in RDB.
+        """
+        self.ctx.db.setGroupTopic(self.name,
+                                  meta["topic"],
+                                  meta["topic_author"])
 
         self.meta = meta
+        self.notifyMetaChange()
+        return defer.succeed(None)
 
+    def updateMeta(self, meta):
+        """
+        Updates the local instance's meta
+        """
+        self.meta = meta
+        self.notifyMetaChange()
+        return defer.succeed(None)
+
+    def notifyMetaChange(self):
         sets = []
-
+        # Maybe dispatch this on NSQ to notify the rest?
+        # Or just make it happen on the observation thread.
+        # Either way should not be here.
         for user in self.local_sessions.itervalues():
-            d = defer.maybeDeferred(user.groupMetaUpdate, self, meta)
+            d = defer.maybeDeferred(user.groupMetaUpdate, self, self.meta)
             d.addErrback(self._ebUserCall, p=user)
             sets.append(d)
         defer.DeferredList(sets).addCallback(self._cbUserCall)
         return defer.succeed(None)
+
+    def notifyShardsAdd(self, added_user_name):
+        """
+        Submits a `join` message on this group's topic,
+        notifying remote shards of the event so that they
+        can in turn relay it to their users.
+        """
+        message = {
+            "type": "join",
+            "user": {
+                "name": added_user_name,
+                "hostname": self.ctx.hostname
+                }
+            }
+        self.ctx.remote_rw.publish(self.name, message)
+
+    def notifyAdd(self, added_user):
+        """
+        Notify the local users of a `join` event.
+        """
+        additions = []
+        if isinstance(added_user, dict):
+            added_user_name = added_user.get("name")
+        else:
+            added_user_name = added_user.name
+
+        for user in self.local_sessions.itervalues():
+            if user.name != added_user_name:
+                d = defer.maybeDeferred(user.userJoined, self, added_user)
+                d.addErrback(self._ebUserCall, p=user)
+                additions.append(d)
+        defer.DeferredList(additions).addCallback(self._cbUserCall)
+
+    def notifyRemove(self, removed_user, reason="unknown reason"):
+        """
+        Notify the local users of a `part` event.
+        """
+        if isinstance(removed_user, dict):
+            removed_user_name = removed_user["name"]
+        else:
+            removed_user_name = removed_user.name
+
+        removals = []
+        for user in self.local_sessions.itervalues():
+            if user.name != removed_user_name:
+                d = defer.maybeDeferred(user.userLeft,
+                                        self,
+                                        removed_user_name,
+                                        reason)
+                d.addErrback(self._ebUserCall, p=user)
+                removals.append(d)
+        defer.DeferredList(removals).addCallback(self._cbUserCall)
+
+    def notifyShardsRemove(self, removed_user_name, reason="unknown reason"):
+        """
+        Publishes a `part` message to this group's topic in order to
+        notify other instances if the event.
+        """
+        message = {
+            "type": "part",
+            "user": {
+                "name": removed_user_name,
+                "hostname": self.ctx.hostname
+            },
+            "reason": reason
+        }
+        self.ctx.remote_rw.publish(self.name, message)
 
     def size(self):
         return defer.succeed(len(self.local_sessions))

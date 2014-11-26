@@ -30,7 +30,6 @@ class ShardedRealm(object):
     and performs message relaying to the latter.
     """
     def __init__(self, ctx, name):
-        # The shard's name
         self.name = name
 
         self.ctx = ctx
@@ -47,9 +46,19 @@ class ShardedRealm(object):
         self.groups = {}
 
     def userFactory(self, name):
+        """
+        Returns a new ShardedUser for the given avatar id.
+        The ShardedUser serves as a controller to the user's
+        model.
+        """
         return ShardedUser(self.ctx, name)
 
     def groupFactory(self, name):
+        """
+        Returns a new ShardedGroup for the given group name.
+        The ShardedGroup severs as a controller to the group's
+        model.
+        """
         return ShardedGroup(self.ctx, name)
 
     def logoutFactory(self, avatar, facet):
@@ -60,10 +69,18 @@ class ShardedRealm(object):
         return logout
 
     def requestAvatar(self, avatarId, mind, *interfaces):
+        """
+        Attempts to create a controller object for the given avatarId
+        and connect it with the client connection (mind).
+        At this point the avatar has been authenticated and the
+        avatar's model must exist in the RDB table.
+        """
         if isinstance(avatarId, str):
             avatarId = avatarId.decode(self._encoding)
 
         def gotAvatar(avatar):
+            # This is a leftover from the original Twisted code;
+            # should never get hit.
             if avatar.realm is not None:
                 raise ewords.AlreadyLoggedIn()
 
@@ -84,21 +101,22 @@ class ShardedRealm(object):
         return defer.succeed(self.groups.itervalues())
 
     def addUser(self, user):
-        # TODO: Integrate database.
-        # check straight in the DB's user list
         if user.name in self.users:
             return defer.fail(failure.Failure(ewords.DuplicateUser()))
 
         self.users[user.name] = user
         return defer.succeed(user)
 
-    def addGroup(self, group):
-        # TODO: Integrate database.
-        if group.name in self.groups:
-            return defer.fail(failure.Failure(ewords.DuplicateGroup()))
+    def getUser(self, name):
+        assert isinstance(name, unicode)
 
-        self.groups[group.name] = group
-        return defer.succeed(group)
+        if self.createUserOnRequest:
+            def ebUser(err):
+                err.trap(ewords.DuplicateUser)
+                return self.lookupUser(name)
+            return self.createUser(name).addErrback(ebUser)
+
+        return self.lookupUser(name)
 
     def lookupUser(self, name):
         """
@@ -128,71 +146,13 @@ class ShardedRealm(object):
 
         return defer.fail(failure.Failure(ewords.NoSuchUser(name)))
 
-    def lookupGroup(self, name):
-        # TODO: Integrate database.
-        assert isinstance(name, unicode)
-        name = name.lower()
-
-        group = self.groups.get(name)
-        if group:
-            return defer.succeed(group)
-
-        group = self.ctx.db.lookupGroup(name)
-        if group:
-            return defer.succeed(self.groupFactory(name))
-
-        return defer.fail(failure.Failure(ewords.NoSuchGroup(name)))
-
-    def getGroup(self, name):
-        # TODO: Integrate database.
-        assert isinstance(name, unicode)
-
-        # Get this setting from the cluster's policy
-        if self.createGroupOnRequest:
-            def ebGroup(err):
-                err.trap(ewords.DuplicateGroup)
-                return self.lookupGroup(name)
-            return self.createGroup(name).addErrback(ebGroup)
-
-        log.msg("Getting group %s" % name)
-        return self.lookupGroup(name)
-
-    def getUser(self, name):
-        # TODO: Integrate database.
-        assert isinstance(name, unicode)
-
-        if self.createUserOnRequest:
-            def ebUser(err):
-                err.trap(ewords.DuplicateUser)
-                return self.lookupUser(name)
-            return self.createUser(name).addErrback(ebUser)
-
-        log.msg("Getting user %s" % name)
-        return self.lookupUser(name)
-
-    def createGroup(self, name):
-        # TODO: Integrate database.
-        assert isinstance(name, unicode)
-
-        def cbLookup(group):
-            return failure.Failure(ewords.DuplicateGroup(name))
-
-        def ebLookup(err):
-            err.trap(ewords.NoSuchGroup)
-            self.ctx.db.createGroup(name, "public")
-            return self.groupFactory(name)
-
-        name = name.lower()
-
-        d = self.lookupGroup(name)
-        d.addCallbacks(cbLookup, ebLookup)
-        d.addCallback(self.addGroup)
-
-        log.msg("Creating group %s" % name)
-        return d
-
     def createUser(self, name):
-        # TODO: Integrate database.
+        """
+        Creates a ShardedUser instance to serve as the
+        controller for a user's model. At this point the
+        user is authenticated and the profile must exist
+        in the RDB table.
+        """
         assert isinstance(name, unicode)
 
         def cbLookup(user):
@@ -208,5 +168,60 @@ class ShardedRealm(object):
         d.addCallbacks(cbLookup, ebLookup)
         d.addCallback(self.addUser)
 
-        log.msg("Creating user %s" % name)
         return d
+
+    def lookupGroup(self, name):
+        """
+        Looks for the group in the local shard's store.
+        """
+        assert isinstance(name, unicode)
+        name = name.lower()
+
+        group = self.groups.get(name)
+        if group:
+            return defer.succeed(group)
+
+        return defer.fail(failure.Failure(ewords.NoSuchGroup(name)))
+
+    def getGroup(self, name):
+        assert isinstance(name, unicode)
+
+        # Get this setting from the cluster's policy
+        if self.createGroupOnRequest:
+            def ebGroup(err):
+                err.trap(ewords.DuplicateGroup)
+                return self.lookupGroup(name)
+            return self.createGroup(name).addErrback(ebGroup)
+
+        return self.lookupGroup(name)
+
+    def addGroup(self, group):
+        if group.name in self.groups:
+            return defer.fail(failure.Failure(ewords.DuplicateGroup()))
+
+        self.groups[group.name] = group
+        return defer.succeed(group)
+
+    def createGroup(self, name):
+        assert isinstance(name, unicode)
+
+        def cbLookup(group):
+            return failure.Failure(ewords.DuplicateGroup(name))
+
+        def ebLookup(err):
+            err.trap(ewords.NoSuchGroup)
+            group = self.ctx.db.lookupGroup(name)
+
+            if not group:
+                self.ctx.db.createGroup(name, "public")
+
+            return self.groupFactory(name)
+
+        name = name.lower()
+
+        d = self.lookupGroup(name)
+        d.addCallbacks(cbLookup, ebLookup)
+        d.addCallback(self.addGroup)
+
+        return d
+

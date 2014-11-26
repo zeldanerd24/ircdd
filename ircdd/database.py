@@ -238,7 +238,7 @@ class IRCDDatabase:
             name
             ).delete().run(self.conn)
 
-    def setGroupTopic(self, name, topic, topic_time, author):
+    def setGroupTopic(self, name, topic, author):
         """
         Set the IRC channel's topic
         """
@@ -246,7 +246,7 @@ class IRCDDatabase:
         return r.table(self.GROUPS_TABLE).get(name).update({
             "topic": {
                 "topic": topic,
-                "topic_time": topic_time,
+                "topic_time": r.now(),
                 "topic_author": author
                 }
             }).run(self.conn)
