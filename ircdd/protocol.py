@@ -22,6 +22,8 @@ class ProxyIRCDDUser():
 
 
 class IRCDDUser(IRCUser):
+    password = "no password"
+
     def receive(self, sender_name, recipient, message):
         """
         Receives a message from the sender for the given recipient.
