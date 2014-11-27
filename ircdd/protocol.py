@@ -26,6 +26,11 @@ class ProxyIRCDDUser():
 class IRCDDUser(IRCUser):
     password = "no password"
 
+    def _channelWho(self, group):
+        self.who(self.name, "#" + group.name,
+                 [(user, self.hostname, self.realm.name, user, "H", 0, user)
+                  for user in group.iterusers()])
+
     def receive(self, sender_name, recipient, message):
         """
         Receives a message from the sender for the given recipient.
@@ -52,17 +57,7 @@ class IRCDDUser(IRCUser):
                                        self.hostname),
                          recipient_name, L)
 
-    def userJoined(self, group, user):
-        # Stupid workaround the fact that this method expects (and receives)
-        # the FULL IRCUser object, even though it clearly needs
-        # only the username... So in order to pass it the username
-        # from a remote message, it has to also handle reciving dicts.
-        if isinstance(user, dict):
-            user_name = user["name"]
-            user_hostname = user["hostname"]
-        else:
-            user_name = user.name
-            user_hostname = user.hostname
+    def userJoined(self, group, user_name, user_hostname):
         self.join(
             "%s!%s@%s" % (user_name, user_name, user_hostname),
             "#" + group.name)
@@ -91,7 +86,7 @@ class IRCDDUser(IRCUser):
 
         def cbGroup(group):
             def cbJoin(ign):
-                self.userJoined(group, self)
+                self.userJoined(group, self.name, self.ctx.hostname)
                 self.names(
                     self.name,
                     "#" + groupName,
@@ -134,7 +129,37 @@ class IRCDDUser(IRCUser):
                 [])
         self.realmlookupGroup(groupName).addCallbacks(cbGroup, ebGroup)
 
-    def _channelWho(self, group):
-        self.who(self.name, "#" + group.name,
-                 [(user, self.hostname, self.realm.name, user, "H", 0, user)
-                  for user in group.iterusers()])
+    def irc_PART(self, prefix, params):
+        """Part message
+
+        Parameters: <channel> *( "," <channel> ) [ <Part Message> ]
+        """
+        try:
+            groupName = params[0].decode(self.encoding)
+        except UnicodeDecodeError:
+            self.sendMessage(
+                irc.ERR_NOTONCHANNEL, params[0],
+                ":Could not decode your unicode!")
+            return
+
+        if groupName.startswith('#'):
+            groupName = groupName[1:]
+
+        if len(params) > 1:
+            reason = params[1].decode('utf-8')
+        else:
+            reason = None
+
+        def cbGroup(group):
+            def cbLeave(result):
+                self.userLeft(group, self.name, reason)
+            return self.avatar.leave(group, reason).addCallback(cbLeave)
+
+        def ebGroup(err):
+            err.trap(ewords.NoSuchGroup)
+            self.sendMessage(
+                irc.ERR_NOTONCHANNEL,
+                '#' + groupName,
+                ":" + err.getErrorMessage())
+
+        self.realm.lookupGroup(groupName).addCallbacks(cbGroup, ebGroup)

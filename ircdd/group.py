@@ -105,7 +105,7 @@ class ShardedGroup(object):
 
         if added_user.name not in self.local_sessions:
             self.local_sessions[added_user.name] = added_user
-            self.notifyAdd(added_user)
+            self.notifyAdd(added_user.name, added_user.ctx.hostname)
             self.notifyShardsAdd(added_user.name)
 
         return defer.succeed(None)
@@ -122,7 +122,7 @@ class ShardedGroup(object):
             log.err("Removing user %s failed: user does not exist" %
                     removed_user.name)
         else:
-            self.notifyRemove(removed_user, reason)
+            self.notifyRemove(removed_user.name, reason)
             self.notifyShardsRemove(removed_user.name, reason)
         return defer.succeed(None)
 
@@ -134,20 +134,19 @@ class ShardedGroup(object):
         :param message: A :class:`nsq.Message` which contains
         the IRC message and metadata in its parsed_body.
         """
-        parsed_msg = message.parsed_msg
-        msg_type = parsed_msg["msg_body"]["type"]
-
-        log.msg("Received %s message %s" % (msg_type, parsed_msg))
+        msg_body = message.parsed_msg["msg_body"]
+        msg_type = msg_body["type"]
 
         if msg_type == "privmsg":
-            self.receive(parsed_msg["msg_body"]["sender"]["name"],
+            self.receive(msg_body["sender"]["name"],
                          self,
-                         parsed_msg.get("msg_body"))
+                         msg_body)
         elif msg_type == "join":
-            self.notifyAdd(parsed_msg["msg_body"]["user"])
+            self.notifyAdd(msg_body["sender"]["name"],
+                           msg_body["sender"]["hostname"])
         elif msg_type == "part":
-            self.notifyRemove(parsed_msg["msg_body"]["user"],
-                              parsed_msg["msg_body"]["reason"])
+            self.notifyRemove(msg_body["sender"]["name"],
+                              msg_body["reason"])
 
         message.finish()
 
@@ -180,13 +179,13 @@ class ShardedGroup(object):
     def setMetadata(self, meta):
         """
         Attempts to set the group meta in RDB.
+        If successful, the local meta will be set via the
+        observer thread.
         """
         self.ctx.db.setGroupTopic(self.name,
                                   meta["topic"],
                                   meta["topic_author"])
 
-        self.meta = meta
-        self.notifyMetaChange()
         return defer.succeed(None)
 
     def updateMeta(self, meta):
@@ -217,39 +216,31 @@ class ShardedGroup(object):
         """
         message = {
             "type": "join",
-            "user": {
+            "sender": {
                 "name": added_user_name,
-                "hostname": self.ctx.hostname
+                "hostname": self.ctx.hostname,
                 }
             }
         self.ctx.remote_rw.publish(self.name, message)
 
-    def notifyAdd(self, added_user):
+    def notifyAdd(self, added_user_name, added_user_hostname):
         """
         Notify the local users of a `join` event.
         """
         additions = []
-        if isinstance(added_user, dict):
-            added_user_name = added_user.get("name")
-        else:
-            added_user_name = added_user.name
 
         for user in self.local_sessions.itervalues():
             if user.name != added_user_name:
-                d = defer.maybeDeferred(user.userJoined, self, added_user)
+                d = defer.maybeDeferred(user.userJoined, self,
+                                        added_user_name, added_user_hostname)
                 d.addErrback(self._ebUserCall, p=user)
                 additions.append(d)
         defer.DeferredList(additions).addCallback(self._cbUserCall)
 
-    def notifyRemove(self, removed_user, reason="unknown reason"):
+    def notifyRemove(self, removed_user_name, reason="unknown reason"):
         """
         Notify the local users of a `part` event.
         """
-        if isinstance(removed_user, dict):
-            removed_user_name = removed_user["name"]
-        else:
-            removed_user_name = removed_user.name
-
         removals = []
         for user in self.local_sessions.itervalues():
             if user.name != removed_user_name:
@@ -268,9 +259,9 @@ class ShardedGroup(object):
         """
         message = {
             "type": "part",
-            "user": {
+            "sender": {
                 "name": removed_user_name,
-                "hostname": self.ctx.hostname
+                "hostname": self.ctx.hostname,
             },
             "reason": reason
         }

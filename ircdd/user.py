@@ -4,6 +4,7 @@ from zope.interface import implements
 
 from twisted.words import iwords
 from twisted.internet import task
+from twisted.python import log
 
 
 class ShardedUser(object):
@@ -93,7 +94,6 @@ class ShardedUser(object):
         """
         self.realm = realm
         self.mind = mind
-        self.signOn = time()
 
         self._hbSession()
 
