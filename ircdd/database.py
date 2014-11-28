@@ -118,7 +118,18 @@ class IRCDDatabase:
         """
         return r.table(self.USERS_TABLE).get(
             nickname
-            ).run(self.conn)
+        ).merge({
+            "session": r.table(self.USER_SESSIONS_TABLE).get(nickname),
+            "groups": r.table(self.GROUPS_TABLE).filter(
+                lambda group: r.table(self.GROUP_STATES_TABLE)
+                               .get(group["id"])
+                               .has_fields({
+                                   "user_heartbeats": {
+                                       nickname: True
+                                   }
+                               })
+            ).coerce_to("array")
+        }).run(self.conn)
 
     def lookupUserSession(self, nickname):
         return r.table(self.USER_SESSIONS_TABLE).get(
@@ -218,13 +229,19 @@ class IRCDDatabase:
         Return the IRC channel dict for channel with given name,
         along with the merged state data.
         """
-
-        return r.table(self.GROUPS_TABLE).get(
+        group = r.table(self.GROUPS_TABLE).get(
             name
-        ).merge({
-            "users": r.table(self.GROUP_STATES_TABLE)
-                .get(name)["user_heartbeats"]
-        }).run(self.conn)
+        ).run(self.conn)
+
+        if group:
+            return r.table(self.GROUPS_TABLE).get(
+                name
+            ).merge({
+                "users": r.table(self.GROUP_STATES_TABLE)
+                          .get(name)["user_heartbeats"]
+            }).run(self.conn)
+        else:
+            return None
 
     def getGroupSize(self, name):
         state = r.table(self.GROUP_STATES_TABLE).get(

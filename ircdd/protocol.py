@@ -2,6 +2,7 @@ from twisted.words.service import IRCUser
 from twisted.python import log
 from twisted.words import iwords, ewords
 from twisted.words.protocols import irc
+from twisted.internet import defer
 
 
 class ProxyIRCDDUser():
@@ -114,7 +115,7 @@ class IRCDDUser(IRCUser):
             groupName = groupName[1:]
 
         def cbGroup(group):
-            self.userJoined(group, self)
+            self.userJoined(group, self.name, self.ctx.hostname)
             self.names(
                 self.name,
                 "#" + groupName,
@@ -127,7 +128,7 @@ class IRCDDUser(IRCUser):
                 self.name,
                 "#" + groupName,
                 [])
-        self.realmlookupGroup(groupName).addCallbacks(cbGroup, ebGroup)
+        self.realm.lookupGroup(groupName).addCallbacks(cbGroup, ebGroup)
 
     def irc_PART(self, prefix, params):
         """Part message
@@ -163,3 +164,52 @@ class IRCDDUser(IRCUser):
                 ":" + err.getErrorMessage())
 
         self.realm.lookupGroup(groupName).addCallbacks(cbGroup, ebGroup)
+
+    def irc_LIST(self, prefix, params):
+        """List query
+
+        Return information about the indicated channels, or about all
+        channels if none are specified.
+
+        Parameters: [ <channel> *( "," <channel> ) [ <target> ] ]
+        """
+        # << list #python
+        # >> :orwell.freenode.net 321 exarkun Channel :Users  Name
+        # >> :orwell.freenode.net 322 exarkun #python 358 :The Python
+        # programming language
+        # >> :orwell.freenode.net 323 exarkun :End of /LIST
+        if params:
+            # Return information about indicated channels
+            try:
+                channels = params[0].decode(self.encoding).split(',')
+            except UnicodeDecodeError:
+                self.sendMessage(
+                    irc.ERR_NOSUCHCHANNEL, params[0],
+                    ":No such channel (could not decode your unicode!)")
+                return
+
+            groups = []
+
+            for ch in channels:
+                if ch.startswith('#'):
+                    ch = ch[1:]
+                groups.append(defer.succeed(self.ctx.db.lookupGroup(ch)))
+
+            groups = defer.DeferredList(groups, consumeErrors=True)
+            groups.addCallback(lambda gs: [r for (s, r) in gs if s])
+        else:
+            # Return information about all channels
+            groups = defer.succeed(iter(self.ctx.db.listGroups()))
+
+        def cbGroups(groups):
+            def emitInfo(group):
+                return (group["name"],
+                        len(group["users"]),
+                        group["topic"]["topic"])
+
+            d = defer.DeferredList([
+                defer.succeed(emitInfo(group)) for group in groups])
+
+            d.addCallback(lambda results: self.list([r for (s, r) in results if s]))
+            return d
+        groups.addCallback(cbGroups)

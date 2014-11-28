@@ -96,9 +96,7 @@ class ShardedRealm(object):
         return self.getUser(avatarId).addCallback(gotAvatar)
 
     def itergroups(self):
-        # TODO: Integrate database.
-        # Add a lookup for remote groups?
-        return defer.succeed(self.groups.itervalues())
+        return defer.succeed(iter(self.ctx.db.listGroups()))
 
     def addUser(self, user):
         if user.name in self.users:
@@ -224,4 +222,3 @@ class ShardedRealm(object):
         d.addCallback(self.addGroup)
 
         return d
-
