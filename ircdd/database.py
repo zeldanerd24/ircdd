@@ -192,7 +192,7 @@ class IRCDDatabase:
             ).run(self.conn)
 
         if not exists:
-            return r.table(self.GROUPS_TABLE).insert({
+            group = r.table(self.GROUPS_TABLE).insert({
                 "id": name,
                 "name": name,
                 "type": channelType,
@@ -203,17 +203,35 @@ class IRCDDatabase:
                 },
                 "messages": []
             }).run(self.conn)
+
+            state = r.table(self.GROUP_STATES_TABLE).insert({
+                "id": name,
+                "user_heartbeats": {}
+            }).run(self.conn)
+
+            return group, state
         else:
             log.err("Group already exists: %s" % name)
 
     def lookupGroup(self, name):
         """
-        Return the IRC channel dict for channel with given name
+        Return the IRC channel dict for channel with given name,
+        along with the merged state data.
         """
 
         return r.table(self.GROUPS_TABLE).get(
             name
-            ).run(self.conn)
+        ).merge({
+            "users": r.table(self.GROUP_STATES_TABLE)
+                .get(name)["user_heartbeats"]
+        }).run(self.conn)
+
+    def getGroupSize(self, name):
+        state = r.table(self.GROUP_STATES_TABLE).get(
+            name
+        ).run(self.conn)
+
+        return len(state["user_heartbeats"].keys())
 
     def getGroupState(self, name):
         return r.table(self.GROUP_STATES_TABLE).get(
@@ -222,12 +240,18 @@ class IRCDDatabase:
 
     def listGroups(self):
         """
-        Returns an array of all IRC channel names present in the database
+        Returns a list of all groups. The documents in the list
+        contain both the current metadata (name, topic, etc) and
+        state information (user sessions).
         """
 
-        return list(r.table(self.CHANNEL_TABLE).filter(
+        return list(r.table(self.GROUPS_TABLE).filter(
             {"type": "public"}
-        ).pluck("name").run(self.conn))
+        ).merge(
+            lambda group: {
+                "users": r.table(self.GROUP_STATES_TABLE).get(group["id"])["user_heartbeats"]
+            }
+        ).run(self.conn))
 
     def deleteGroup(self, name):
         """
