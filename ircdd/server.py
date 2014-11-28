@@ -13,6 +13,8 @@ class IRCDDFactory(protocol.ServerFactory):
     the raw config values and the initialized shared drivers.
     """
 
+    protocol = IRCDDUser
+
     def __init__(self, ctx):
         # This is to support the stock IRCUser.
         # For other components, use ctx instead
@@ -21,7 +23,11 @@ class IRCDDFactory(protocol.ServerFactory):
         self.portal = ctx['portal']
         self._serverInfo = ctx['server_info']
 
-    protocol = IRCDDUser
+    def buildProtocol(self, addr):
+        p = self.protocol()
+        p.factory = self
+        p.ctx = self.ctx
+        return p
 
 
 def makeServer(ctx):

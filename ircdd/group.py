@@ -44,7 +44,7 @@ class ShardedGroup(object):
         """
         group = self.ctx.db.lookupGroup(self.name)
         if group:
-            self.updateMeta(group["topic"])
+            self.updateMeta(group["meta"])
 
     def getState(self):
         """
@@ -53,7 +53,7 @@ class ShardedGroup(object):
         """
         state = self.ctx.db.getGroupState(self.name)
         if state:
-            self.users = state["user_heartbeats"]
+            self.users = state["users"]
 
     def _observeState(self):
         """
@@ -74,7 +74,7 @@ class ShardedGroup(object):
 
         for change in changeset:
             reactor.callFromThread(updateUserList,
-                                   change["new_val"]["user_heartbeats"])
+                                   change["new_val"]["users"])
 
     def _observeMeta(self):
         """
@@ -92,7 +92,7 @@ class ShardedGroup(object):
         for change in changeset:
             if change.get("new_val"):
                 reactor.callFromThread(self.updateMeta,
-                                       change["new_val"]["topic"])
+                                       change["new_val"]["meta"])
 
     def add(self, added_user):
         """

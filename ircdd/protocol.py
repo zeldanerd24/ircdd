@@ -1,3 +1,5 @@
+import time
+
 from twisted.words.service import IRCUser
 from twisted.python import log
 from twisted.words import iwords, ewords
@@ -26,11 +28,6 @@ class ProxyIRCDDUser():
 
 class IRCDDUser(IRCUser):
     password = "no password"
-
-    def _channelWho(self, group):
-        self.who(self.name, "#" + group.name,
-                 [(user, self.hostname, self.realm.name, user, "H", 0, user)
-                  for user in group.iterusers()])
 
     def receive(self, sender_name, recipient, message):
         """
@@ -205,11 +202,85 @@ class IRCDDUser(IRCUser):
             def emitInfo(group):
                 return (group["name"],
                         len(group["users"]),
-                        group["topic"]["topic"])
+                        group["meta"]["topic"])
 
             d = defer.DeferredList([
                 defer.succeed(emitInfo(group)) for group in groups])
 
-            d.addCallback(lambda results: self.list([r for (s, r) in results if s]))
+            d.addCallback(lambda results:
+                          self.list([r for (s, r) in results if s]))
             return d
         groups.addCallback(cbGroups)
+
+    def _channelWho(self, group):
+        self.who(self.name, "#" + group["name"],
+                 [(user, self.hostname, self.realm.name, user, "H", 0, user)
+                  for user in group["users"].iterkeys()])
+
+    def irc_WHO(self, prefix, params):
+        """Who query
+
+        Parameters: [ <mask> [ "o" ] ]
+        """
+
+        if not params:
+            self.sendMessage(irc.RPL_ENDOFWHO, ":/WHO not supported.")
+            return
+
+        try:
+            channelOrUser = params[0].decode(self.encoding)
+        except UnicodeDecodeError:
+            self.sendMessage(
+                irc.RPL_ENDOFWHO, params[0],
+                ":End of /WHO list (could not decode your unicode!)")
+            return
+
+        if channelOrUser.startswith('#'):
+            def ebGroup(err):
+                err.trap(ewords.NoSuchGroup)
+                self.sendMessage(
+                    irc.RPL_ENDOFWHO, channelOrUser,
+                    ":End of /WHO list.")
+            d = defer.succeed(self.ctx.db.lookupGroup(channelOrUser[1:]))
+            d.addCallbacks(self._channelWho, ebGroup)
+        else:
+            def ebUser(err):
+                err.trap(ewords.NoSuchUser)
+                self.sendMessage(
+                    irc.RPL_ENDOFWHO, channelOrUser,
+                    ":End of /WHO list.")
+            d = self.realm.lookupUser(channelOrUser)
+            d.addCallbacks(self._userWho, ebUser)
+
+    def irc_WHOIS(self, prefix, params):
+        """Whois query
+
+        Parameters: [ <target> ] <mask> *( "," <mask> )
+        """
+        def cbUser(user):
+            self.whois(
+                self.name,
+                user["nickname"], user["nickname"], self.realm.name,
+                user["nickname"], self.realm.name, 'Hi mom!', False,
+                time.mktime(user["session"]["last_heartbeat"].timetuple()),
+                time.mktime(user["session"]["last_heartbeat"].timetuple()),
+                ['#' + group["name"] for group in user["groups"]])
+
+        def ebUser(err):
+            err.trap(ewords.NoSuchUser)
+            self.sendMessage(
+                irc.ERR_NOSUCHNICK,
+                params[0],
+                ":No such nick/channel")
+
+        try:
+            user = params[0].decode(self.encoding)
+        except UnicodeDecodeError:
+            self.sendMessage(
+                irc.ERR_NOSUCHNICK,
+                params[0],
+                ":No such nick/channel")
+            return
+
+        defer.succeed(self.ctx.db.lookupUser(user)).addCallbacks(cbUser,
+                                                                 ebUser)

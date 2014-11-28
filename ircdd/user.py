@@ -4,7 +4,6 @@ from zope.interface import implements
 
 from twisted.words import iwords
 from twisted.internet import task
-from twisted.python import log
 
 
 class ShardedUser(object):

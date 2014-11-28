@@ -3,7 +3,7 @@ from zope.interface import implements
 from twisted.cred import portal
 from twisted.words import ewords, iwords
 from twisted.internet import defer
-from twisted.python import failure, log
+from twisted.python import failure
 
 from ircdd.user import ShardedUser
 from ircdd.group import ShardedGroup
@@ -95,8 +95,8 @@ class ShardedRealm(object):
             raise NotImplementedError(self, interfaces)
         return self.getUser(avatarId).addCallback(gotAvatar)
 
-    def itergroups(self):
-        return defer.succeed(iter(self.ctx.db.listGroups()))
+    # def itergroups(self):
+    #    return defer.succeed(iter(self.ctx.db.listGroups()))
 
     def addUser(self, user):
         if user.name in self.users:
