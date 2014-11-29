@@ -10,14 +10,12 @@ class TestIRCDDatabase():
                               host=integration.HOST,
                               port=integration.PORT)
 
-        integration.createTables()
-
         self.db = database.IRCDDatabase(integration.DB,
                                         integration.HOST,
                                         integration.PORT)
 
     def tearDown(self):
-        integration.dropTables()
+        integration.cleanTables()
 
         self.conn.close()
 

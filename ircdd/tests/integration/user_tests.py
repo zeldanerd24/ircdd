@@ -17,8 +17,6 @@ class TestShardedUser:
                               host=integration.HOST,
                               port=integration.PORT)
 
-        integration.createTables()
-
         config = dict(nsqd_tcp_address=["127.0.0.1:4150"],
                       lookupd_http_address=["127.0.0.1:4161"],
                       hostname="testserver",
@@ -44,7 +42,7 @@ class TestShardedUser:
         self.transport.loseConnection()
         self.protocol.connectionLost(None)
 
-        integration.dropTables()
+        integration.cleanTables()
 
         self.conn.close()
 
