@@ -11,6 +11,10 @@ GROUPS_TABLE = "groups"
 def setUp():
     conn = r.connect(db=DB, host=HOST, port=PORT)
     r.db_create(DB).run(conn)
+    r.db(DB).table_create("users").run(conn)
+    r.db(DB).table_create("groups").run(conn)
+    r.db(DB).table_create("user_sessions").run(conn)
+    r.db(DB).table_create("group_states").run(conn)
     conn.close()
 
 
@@ -20,23 +24,12 @@ def tearDown():
     conn.close()
 
 
-def createTables():
+def cleanTables():
     conn = r.connect(db=DB,
                      host=HOST,
                      port=PORT)
-    r.db(DB).table_create("users").run(conn)
-    r.db(DB).table_create("groups").run(conn)
-    r.db(DB).table_create("user_sessions").run(conn)
-    r.db(DB).table_create("group_states").run(conn)
-    conn.close()
-
-
-def dropTables():
-    conn = r.connect(db=DB,
-                     host=HOST,
-                     port=PORT)
-    r.db(DB).table_drop("users").run(conn)
-    r.db(DB).table_drop("groups").run(conn)
-    r.db(DB).table_drop("user_sessions").run(conn)
-    r.db(DB).table_drop("group_states").run(conn)
+    r.db(DB).table("users").delete().run(conn)
+    r.db(DB).table("groups").delete().run(conn)
+    r.db(DB).table("user_sessions").delete().run(conn)
+    r.db(DB).table("group_states").delete().run(conn)
     conn.close()
