@@ -59,34 +59,29 @@ class TestShardedUser:
     def test_userHeartbeats(self):
         self.shardedUser.loggedIn(self.ctx.realm, None)
 
-        hb = r.db(integration.DB).table("user_sessions").get(
-            "john"
-        ).run(self.conn)
+        session = self.ctx.db.lookupUserSession("john")
 
-        assert hb
-        assert hb.get("last_heartbeat")
-        assert hb.get("last_heartbeat") != ""
+        assert session
+        assert session.get("last_heartbeat")
+        assert session.get("last_heartbeat") != ""
 
         self.ctx.db.heartbeatUserSession("john")
-        hb2 = r.db(integration.DB).table("user_sessions").get(
-            "john"
-        ).run(self.conn)
+        updated_session = self.ctx.db.lookupUserSession("john")
 
-        assert hb2
-        assert hb2.get("last_heartbeat")
-        assert hb2.get("last_heartbeat") != ""
+        assert updated_session
+        assert updated_session.get("last_heartbeat")
+        assert updated_session.get("last_heartbeat") != ""
 
-        assert hb.get("last_heartbeat") != hb2.get("last_heartbeat")
+        assert session.get("last_heartbeat") != \
+            updated_session.get("last_heartbeat")
 
     def test_userInGroupHeartbeats(self):
         group = ShardedGroup(self.ctx, "test_group")
 
         self.shardedUser.join(group)
 
-        hb = r.db(integration.DB).table("group_states").get(
-            "test_group"
-        ).run(self.conn)
+        group_state = self.ctx.db.getGroupState("test_group")
 
-        assert hb
-        assert hb["user_heartbeats"]["john"]
-        assert hb["user_heartbeats"]["john"] != ""
+        assert group_state
+        assert group_state["users"]["john"]
+        assert group_state["users"]["john"] != ""

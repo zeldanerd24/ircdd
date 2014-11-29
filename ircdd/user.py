@@ -93,7 +93,6 @@ class ShardedUser(object):
         """
         self.realm = realm
         self.mind = mind
-        self.signOn = time()
 
         self._hbSession()
 

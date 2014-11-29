@@ -80,73 +80,46 @@ class TestIRCDDatabase():
         assert user['permissions']['test_channel'] == ['+s']
 
     def test_createGroup(self):
-        self.db.createGroup('test_channel', 'owner', 'public')
-        channel = self.db.lookupGroup('test_channel')
-        assert channel['name'] == 'test_channel'
-        assert channel['owner'] == 'owner'
-        assert channel['type'] == 'public'
-        assert channel['topic'] != {}
-        assert channel['messages'] == []
+        self.db.createGroup('test_channel', 'public')
+
+        group = self.db.lookupGroup('test_channel')
+
+        assert group['name'] == 'test_channel'
+        assert group['type'] == 'public'
+        assert group['meta'] != {}
+        assert group['messages'] == []
+        assert group["users"] == {}
 
     def test_deleteGroup(self):
-        self.db.createGroup('test_channel', 'owner', 'public')
+        self.db.createGroup('test_channel', 'public')
         channel = self.db.lookupGroup('test_channel')
         assert channel['name'] == 'test_channel'
-        assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
-        assert channel['topic'] != {}
+        assert channel['meta'] != {}
         assert channel['messages'] == []
+
         self.db.deleteGroup('test_channel')
+
         channel = self.db.lookupGroup('test_channel')
         assert channel is None
 
+        state = self.db.getGroupState("test_channel")
+        assert state is None
+
     def test_setGroupData(self):
-        self.db.createGroup('test_channel', 'owner', 'public')
+        self.db.createGroup('test_channel', 'public')
         channel = self.db.lookupGroup('test_channel')
         assert channel['name'] == 'test_channel'
-        assert channel['owner'] == 'owner'
         assert channel['type'] == 'public'
-        assert channel['topic'] != {}
+        assert channel['meta'] != {}
         assert channel['messages'] == []
-        self.db.setGroupTopic('test_channel', 'test', '1:23', 'author')
+
+        self.db.setGroupTopic('test_channel', 'test', 'john_doe')
         channel = self.db.lookupGroup('test_channel')
-        assert channel['topic']['topic'] == 'test'
-        assert channel['topic']['topic_time'] == '1:23'
-        assert channel['topic']['topic_author'] == 'author'
 
-    def test_addMessage(self):
-        self.db.createGroup('test_channel', 'owner', 'public')
-
-        sender = "test_user"
-        timestamp = "2014-10-15 10:14:51"
-        text = "some text message"
-
-        self.db.addMessage('test_channel',
-                           sender,
-                           timestamp,
-                           text)
-
-        sender2 = "other_user"
-        timestamp2 = "2014-10-15 10:14:55"
-        text2 = "response to text message"
-
-        self.db.addMessage('test_channel',
-                           sender2,
-                           timestamp2,
-                           text2)
-
-        channel = self.db.lookupGroup('test_channel')
-        assert channel['name'] == 'test_channel'
-        assert channel['owner'] == 'owner'
-        assert channel['type'] == 'public'
-        assert channel['topic'] != {}
-        assert channel['messages'][0]['sender'] == sender
-        assert channel['messages'][0]['time'] == timestamp
-        assert channel['messages'][0]['text'] == text
-
-        assert channel['messages'][1]['sender'] == sender2
-        assert channel['messages'][1]['time'] == timestamp2
-        assert channel['messages'][1]['text'] == text2
+        assert channel['meta']['topic'] == 'test'
+        assert channel['meta']['topic_time']
+        assert channel['meta']['topic_author'] == 'john_doe'
 
     def test_checkIfValidEmail(self):
         email = "validemail@email.com"
@@ -163,21 +136,6 @@ class TestIRCDDatabase():
 
         self.db.checkIfValidPassword(password)
 
-    def test_privateMessage(self):
-        sender = "sender"
-        receiver = "receiver"
-        timestamp = "2014-11-09 13:05:30"
-        text = "private message"
-
-        self.db.privateMessage(sender,
-                               receiver,
-                               timestamp,
-                               text)
-
-        channel = self.db.lookupGroup('receiver:sender')
-        assert channel['name'] == 'receiver:sender'
-        assert channel['type'] == 'private'
-
     def test_heartbeatsUserSession(self):
         result = self.db.heartbeatUserSession("test_user")
         assert result["inserted"] == 1
@@ -188,24 +146,18 @@ class TestIRCDDatabase():
     def test_heartbeatUserInGroup(self):
         # Creates initial heartbeat
         result = self.db.heartbeatUserInGroup("test_user", "test_group")
-
-        heartbeat_data = r.db(integration.DB).table("group_states").get(
-            "test_group"
-        ).run(self.conn)
+        group_state = self.db.getGroupState("test_group")
 
         assert result["inserted"] == 1
-        assert heartbeat_data["user_heartbeats"].get("test_user")
+        assert group_state["users"].get("test_user")
 
         # Updates user heartbeat
         result = self.db.heartbeatUserInGroup("test_user", "test_group")
         assert result["replaced"] == 1
 
-        new_heartbeat_data = r.db(integration.DB).table("group_states").get(
-            "test_group"
-        ).run(self.conn)
-
-        assert new_heartbeat_data["user_heartbeats"]["test_user"] != \
-            heartbeat_data["user_heartbeats"]["test_user"]
+        new_group_state = self.db.getGroupState("test_group")
+        assert new_group_state["users"]["test_user"] != \
+            group_state["users"]["test_user"]
 
     def test_removeUserFromGroup(self):
         self.db.heartbeatUserInGroup("test_user", "test_group")
@@ -213,12 +165,9 @@ class TestIRCDDatabase():
 
         assert result["replaced"] == 1
 
-        heartbeat_data = r.db(integration.DB).table("group_states").get(
-            "test_group"
-        ).run(self.conn)
-
-        assert False == heartbeat_data["user_heartbeats"].get("test_user",
-                                                              False)
+        group_state = self.db.getGroupState("test_group")
+        assert False == group_state["users"].get("test_user",
+                                                 False)
 
     def test_observesGroupStateChanges(self):
         self.db.heartbeatUserInGroup("john", "test_group")
@@ -230,5 +179,5 @@ class TestIRCDDatabase():
 
         change = next(changefeed)
 
-        assert change["old_val"]["user_heartbeats"].get("john", None) is not None \
-            and change["new_val"]["user_heartbeats"].get("john", None) is None
+        assert change["old_val"]["users"].get("john", None) is not None \
+            and change["new_val"]["users"].get("john", None) is None

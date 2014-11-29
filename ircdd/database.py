@@ -35,7 +35,7 @@ class IRCDDatabase:
 
         exists = r.table(self.USERS_TABLE).get(
             nickname
-            ).run(self.conn)
+        ).run(self.conn)
 
         if not exists:
             r.table(self.USERS_TABLE).insert({
@@ -50,14 +50,16 @@ class IRCDDatabase:
             log.err("User already exists: %s" % nickname)
 
     def heartbeatUserSession(self, nickname):
-        presence = r.table(self.USER_SESSIONS_TABLE).get(
+        session = r.table(self.USER_SESSIONS_TABLE).get(
             nickname
         ).run(self.conn)
 
-        if not presence:
+        if not session:
             return r.table(self.USER_SESSIONS_TABLE).insert({
                 "id": nickname,
                 "last_heartbeat": r.now(),
+                "last_message": r.now(),
+                "session_start": r.now()
             }).run(self.conn)
         else:
             return r.table(self.USER_SESSIONS_TABLE).get(nickname).update({
@@ -71,7 +73,7 @@ class IRCDDatabase:
 
     def removeUserFromGroup(self, nickname, group):
         return r.table(self.GROUP_STATES_TABLE).get(group).replace(
-            r.row.without({"user_heartbeats": {nickname: True}})
+            r.row.without({"users": {nickname: True}})
         ).run(self.conn)
 
     def heartbeatUserInGroup(self, nickname, group):
@@ -82,13 +84,13 @@ class IRCDDatabase:
         if not presence:
             return r.table(self.GROUP_STATES_TABLE).insert({
                 "id": group,
-                "user_heartbeats": {
+                "users": {
                     nickname: r.now()
                 }
             }).run(self.conn)
         else:
             return r.table(self.GROUP_STATES_TABLE).get(group).update({
-                "user_heartbeats": r.row["user_heartbeats"].merge({
+                "users": r.row["users"].merge({
                     nickname: r.now()
                 })
             }).run(self.conn)
@@ -116,9 +118,27 @@ class IRCDDatabase:
         Finds the user with given nickname and returns the dict for it
         Returns None if the user is not found
         """
-        return r.table(self.USERS_TABLE).get(
+        exists = r.table(self.USERS_TABLE).get(
             nickname
-            ).run(self.conn)
+        ).run(self.conn)
+
+        if exists:
+            return r.table(self.USERS_TABLE).get(
+                nickname
+            ).merge({
+                "session": r.table(self.USER_SESSIONS_TABLE).get(nickname),
+                "groups": r.table(self.GROUPS_TABLE).filter(
+                    lambda group: r.table(self.GROUP_STATES_TABLE)
+                                   .get(group["id"])
+                                   .has_fields({
+                                       "users": {
+                                           nickname: True
+                                       }
+                                   })
+                ).coerce_to("array")
+            }).run(self.conn)
+        else:
+            return None
 
     def lookupUserSession(self, nickname):
         return r.table(self.USER_SESSIONS_TABLE).get(
@@ -173,7 +193,7 @@ class IRCDDatabase:
                     })
             }).run(self.conn)
 
-    def createGroup(self, name, owner, channelType):
+    def createGroup(self, name, channelType):
         """
         Create an IRC channel (if it doesn't exist yet) in the channels table
         Fields for the channels table are:
@@ -185,7 +205,6 @@ class IRCDDatabase:
         message time, message author, and message contents
         """
         assert name
-        assert owner
         assert channelType
 
         exists = r.table(self.GROUPS_TABLE).get(
@@ -193,29 +212,45 @@ class IRCDDatabase:
             ).run(self.conn)
 
         if not exists:
-            return r.table(self.GROUPS_TABLE).insert({
+            group = r.table(self.GROUPS_TABLE).insert({
                 "id": name,
                 "name": name,
-                "owner": owner,
                 "type": channelType,
-                "topic": {
+                "meta": {
                     "topic": "",
                     "topic_author": "",
                     "topic_time": r.now()
                 },
                 "messages": []
             }).run(self.conn)
+
+            state = r.table(self.GROUP_STATES_TABLE).insert({
+                "id": name,
+                "users": {}
+            }).run(self.conn)
+
+            return group, state
         else:
             log.err("Group already exists: %s" % name)
 
     def lookupGroup(self, name):
         """
-        Return the IRC channel dict for channel with given name
+        Return the IRC channel dict for channel with given name,
+        along with the merged state data.
         """
-
-        return r.table(self.GROUPS_TABLE).get(
+        group = r.table(self.GROUPS_TABLE).get(
             name
-            ).run(self.conn)
+        ).run(self.conn)
+
+        if group:
+            return r.table(self.GROUPS_TABLE).get(
+                name
+            ).merge({
+                "users": r.table(self.GROUP_STATES_TABLE)
+                          .get(name)["users"]
+            }).run(self.conn)
+        else:
+            return None
 
     def getGroupState(self, name):
         return r.table(self.GROUP_STATES_TABLE).get(
@@ -224,34 +259,47 @@ class IRCDDatabase:
 
     def listGroups(self):
         """
-        Returns an array of all IRC channel names present in the database
+        Returns a list of all groups. The documents in the list
+        contain both the current metadata (name, topic, etc) and
+        state information (user sessions).
         """
 
-        return list(r.table(self.CHANNEL_TABLE).pluck("name").run(self.conn))
+        return list(r.table(self.GROUPS_TABLE).filter(
+            {"type": "public"}
+        ).merge(lambda group: {
+            "users": r.table(self.GROUP_STATES_TABLE)
+                      .get(group["id"])["users"]
+        }).run(self.conn))
 
     def deleteGroup(self, name):
         """
         Delete the IRC channel with the given channel name
         """
 
-        return r.table(self.GROUPS_TABLE).get(
+        deleted_group = r.table(self.GROUPS_TABLE).get(
             name
-            ).delete().run(self.conn)
+        ).delete().run(self.conn)
 
-    def setGroupTopic(self, name, topic, topic_time, author):
+        deleted_state = r.table(self.GROUP_STATES_TABLE).get(
+            name
+        ).delete().run(self.conn)
+
+        return deleted_group, deleted_state
+
+    def setGroupTopic(self, name, topic, author):
         """
         Set the IRC channel's topic
         """
 
         return r.table(self.GROUPS_TABLE).get(name).update({
-            "topic": {
+            "meta": {
                 "topic": topic,
-                "topic_time": topic_time,
+                "topic_time": r.now(),
                 "topic_author": author
                 }
             }).run(self.conn)
 
-    def addMessage(self, name, sender, time, text):
+    def addMessage(self, name, sender, text):
         """
         Add a message to IRC channel denoted by channel_name, written by
         nickname and store the message time and contents
@@ -260,7 +308,7 @@ class IRCDDatabase:
         r.table(self.GROUPS_TABLE).get(name).update({
             "messages": r.row["messages"].append({
                 "sender": sender,
-                "time": time,
+                "time": r.now(),
                 "text": text
                 })
             }).run(self.conn)
@@ -320,6 +368,6 @@ class IRCDDatabase:
         name = list[0] + ":" + list[1]
 
         if not self.lookupGroup(name):
-            self.createGroup(name, 'owner', 'private')
+            self.createGroup(name, 'private')
 
         self.addMessage(name, sender, time, message)

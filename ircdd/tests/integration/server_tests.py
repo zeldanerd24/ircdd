@@ -60,9 +60,6 @@ class TestIRCDDAuth:
         return map(irc.parsemsg, response)
 
     def test_anon_login(self):
-        # Anonymous users still need to give the server a password
-        # because of how Twisted's IRC works.
-        self.protocol.irc_PASS("", ["password"])
         self.protocol.irc_NICK("", ["anonuser"])
 
         version = ("Your host is testserver, running version %s" %

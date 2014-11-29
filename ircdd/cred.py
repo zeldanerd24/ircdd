@@ -30,6 +30,18 @@ class DatabaseCredentialsChecker:
             return failure.Failure(error.UnauthorizedLogin())
 
     def requestAvatarId(self, credentials):
+        """
+        Fetches the username of the profile that matches the given
+        credentials. If the profile exists has a currently active session,
+        authorization is denied. If the profile exists, has no active session,
+        and is registered, the credentials are authenticated - on success the
+        avatar name is returned. If the profile exists, has no current session,
+        and is not registered, the avatar is returned (this allows annonymous
+        users to take on other anonymous identities which are not being used).
+        Finally, if the profile does not exist and profile creation is enabled,
+        it is created and returned. All other cases result in a failure.
+        """
+
         user = self.ctx["db"].lookupUser(credentials.username)
         if user:
             session = self.ctx.db.lookupUserSession(credentials.username)
