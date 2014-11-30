@@ -85,7 +85,6 @@ class TestIRCDDatabase():
         assert group['name'] == 'test_channel'
         assert group['type'] == 'public'
         assert group['meta'] != {}
-        assert group['messages'] == []
         assert group["users"] == {}
 
     def test_deleteGroup(self):
@@ -94,7 +93,6 @@ class TestIRCDDatabase():
         assert channel['name'] == 'test_channel'
         assert channel['type'] == 'public'
         assert channel['meta'] != {}
-        assert channel['messages'] == []
 
         self.db.deleteGroup('test_channel')
 
@@ -110,7 +108,6 @@ class TestIRCDDatabase():
         assert channel['name'] == 'test_channel'
         assert channel['type'] == 'public'
         assert channel['meta'] != {}
-        assert channel['messages'] == []
 
         self.db.setGroupTopic('test_channel', 'test', 'john_doe')
         channel = self.db.lookupGroup('test_channel')
