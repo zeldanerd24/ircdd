@@ -337,18 +337,3 @@ class IRCDDatabase:
         if not valid_password.match(password):
             log.error("Invalid password: %s" % password)
             raise ValueError(password)
-
-    def privateMessage(self, sender, receiver):
-        """
-        Creates an IRC channel for private messages between two users.
-        The channel_name is the alphabetical ordering of the user's
-        nicknames separated by a ':'
-        """
-
-        list = [sender, receiver]
-        list.sort()
-
-        name = list[0] + ":" + list[1]
-
-        if not self.lookupGroup(name):
-            self.createGroup(name, 'private')
