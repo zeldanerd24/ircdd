@@ -200,9 +200,7 @@ class IRCDDatabase:
         name (string) the name of the channel
         owner (string) the owner (by nickname) of the channel
         type (string) public or private
-        topic (dict) dict of topic message, topic author, topic time
-        messages (array of dicts) each element (message) contains
-        message time, message author, and message contents
+        topic (dict) dict of topic message, topic author, topic time.
         """
         assert name
         assert channelType
@@ -221,7 +219,6 @@ class IRCDDatabase:
                     "topic_author": "",
                     "topic_time": r.now()
                 },
-                "messages": []
             }).run(self.conn)
 
             state = r.table(self.GROUP_STATES_TABLE).insert({
@@ -299,20 +296,6 @@ class IRCDDatabase:
                 }
             }).run(self.conn)
 
-    def addMessage(self, name, sender, text):
-        """
-        Add a message to IRC channel denoted by channel_name, written by
-        nickname and store the message time and contents
-        """
-
-        r.table(self.GROUPS_TABLE).get(name).update({
-            "messages": r.row["messages"].append({
-                "sender": sender,
-                "time": r.now(),
-                "text": text
-                })
-            }).run(self.conn)
-
     def checkIfValidEmail(self, email):
         """
         Checks if the passed email is valid based on the regex string
@@ -354,20 +337,3 @@ class IRCDDatabase:
         if not valid_password.match(password):
             log.error("Invalid password: %s" % password)
             raise ValueError(password)
-
-    def privateMessage(self, sender, receiver, time, message):
-        """
-        Creates an IRC channel for private messages between two users.
-        The channel_name is the alphabetical ordering of the user's
-        nicknames separated by a ':'
-        """
-
-        list = [sender, receiver]
-        list.sort()
-
-        name = list[0] + ":" + list[1]
-
-        if not self.lookupGroup(name):
-            self.createGroup(name, 'private')
-
-        self.addMessage(name, sender, time, message)
