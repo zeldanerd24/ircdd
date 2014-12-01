@@ -23,7 +23,7 @@ class ProxyIRCDDUser():
         method just logs the fact that the proxy was hit.
         """
         log.msg("Proxy received message %s from %s for %s" %
-                str(message, sender_name, recipient))
+                (message, sender_name, recipient))
 
 
 class IRCDDUser(IRCUser):
