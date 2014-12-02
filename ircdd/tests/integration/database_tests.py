@@ -165,13 +165,15 @@ class TestIRCDDatabase():
                                                  False)
 
     def test_observesGroupStateChanges(self):
+
         changefeed = self.db.observeGroupState("test_group")
-
         self.db.heartbeatUserInGroup("john", "test_group")
-        assert "john" in next(changefeed)
-
         self.db.heartbeatUserInGroup("bob", "test_group")
-        assert "bob" in next(changefeed)
+
+        added_users_change = next(changefeed)
+        assert "john" in added_users_change["users"]
+        assert "bob" in added_users_change["users"]
 
         self.db.removeUserFromGroup("john", "test_group")
-        assert "john" not in next(changefeed)
+        removed_user_change = next(changefeed)
+        assert "john" not in removed_user_change["users"]
