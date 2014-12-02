@@ -170,11 +170,9 @@ class ShardedGroup(object):
     def iterusers(self):
         """
         Returns the list of users connected to this
-        group across all instances. Since `users` is
-        a dict of username:timestamp, return just the
-        keys.
+        group across all instances.
         """
-        return iter(self.users.keys())
+        return iter(self.users)
 
     def setMetadata(self, meta):
         """
