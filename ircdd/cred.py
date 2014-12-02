@@ -47,7 +47,7 @@ class DatabaseCredentialsChecker:
             session = self.ctx.db.lookupUserSession(credentials.username)
             # If the session is active, fail - another user is connected
             # under these credentials. TODO: Add TTL
-            if session:
+            if session and session["active"]:
                 return defer.fail(ewords.AlreadyLoggedIn())
 
             # Registered user, session expired -> check password

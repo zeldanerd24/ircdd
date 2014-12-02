@@ -85,13 +85,17 @@ class IRCDDatabase:
             return r.table(self.GROUP_STATES_TABLE).insert({
                 "id": group,
                 "users": {
-                    nickname: r.now()
+                    nickname: {
+                        "heartbeat": r.now()
+                    }
                 }
             }).run(self.conn)
         else:
             return r.table(self.GROUP_STATES_TABLE).get(group).update({
                 "users": r.row["users"].merge({
-                    nickname: r.now()
+                    nickname: {
+                        "heartbeat": r.now()
+                    }
                 })
             }).run(self.conn)
 
@@ -102,6 +106,15 @@ class IRCDDatabase:
 
         return r.table(self.GROUP_STATES_TABLE).changes().filter(
             r.row["old_val"]["id"] == group or r.row["new_val"]["id"] == group
+        )["new_val"].merge(
+            lambda state: {
+                "users": state["users"].keys().filter(
+                    lambda user: r.now()
+                                  .sub(state["users"][user]["heartbeat"])
+                                  .lt(30)
+                                  .default(False)
+                )
+            }
         ).run(conn)
 
     def observeGroupMeta(self, group):
@@ -141,9 +154,20 @@ class IRCDDatabase:
             return None
 
     def lookupUserSession(self, nickname):
-        return r.table(self.USER_SESSIONS_TABLE).get(
+        exists = r.table(self.USER_SESSIONS_TABLE).get(
             nickname
         ).run(self.conn)
+
+        if exists:
+            return r.table(self.USER_SESSIONS_TABLE).get(
+                nickname
+            ).merge(
+                lambda session: {
+                    "active": r.now()
+                               .sub(session["last_heartbeat"])
+                               .lt(30).default(False)
+                }
+            ).run(self.conn)
 
     def registerUser(self, nickname, email, password):
         """
