@@ -141,9 +141,20 @@ class IRCDDatabase:
             return None
 
     def lookupUserSession(self, nickname):
-        return r.table(self.USER_SESSIONS_TABLE).get(
+        exists = r.table(self.USER_SESSIONS_TABLE).get(
             nickname
         ).run(self.conn)
+
+        if exists:
+            return r.table(self.USER_SESSIONS_TABLE).get(
+                nickname
+            ).merge(
+                lambda session: {
+                    "active": r.now()
+                               .sub(session["last_heartbeat"])
+                               .lt(30).default(False)
+                }
+            ).run(self.conn)
 
     def registerUser(self, nickname, email, password):
         """

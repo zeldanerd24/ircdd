@@ -137,7 +137,7 @@ class ShardedRealm(object):
 
         # User exists and session is active, so he must be
         # connected to some remote
-        if remote_user and user_session:
+        if remote_user and user_session and user_session["active"]:
             return defer.succeed(ShardedUser(self.ctx,
                                              name,
                                              ProxyIRCDDUser(self.ctx, name)))
