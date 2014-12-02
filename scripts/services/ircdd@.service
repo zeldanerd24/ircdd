@@ -27,3 +27,6 @@ ExecStart=/usr/bin/docker run \
                           confd-watch-ircdd
 
 ExecStop=/usr/bin/docker stop ircdd-%i
+
+[X-Fleet]
+Conflicts=ircdd@*.service

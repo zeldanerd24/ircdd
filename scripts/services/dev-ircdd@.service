@@ -26,3 +26,6 @@ ExecStart=/usr/bin/docker run \
                           -v /home/core/ircdd:/data \
                           dev-ircdd bash -c "python setup.py install && confd-watch-ircdd"
 ExecStop=/usr/bin/docker stop ircdd-%i
+
+[X-Fleet]
+Conflicts=dev-ircdd@*.service
