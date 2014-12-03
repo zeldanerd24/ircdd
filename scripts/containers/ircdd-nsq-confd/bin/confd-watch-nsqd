@@ -18,6 +18,6 @@ confd -interval 10 -node $ETCD -config-file /etc/confd/conf.d/nsqd.toml &> /var/
 
 echo "[nsqd] starting nsqd..."
 echo "" > /var/log/nsqd.log
-nsqd -config=/etc/nsq/nsqd.toml &> /var/log/nsqd.log &
+nsqd --broadcast-address=$HOST_IP -config=/etc/nsq/nsqd.toml &> /var/log/nsqd.log &
 
 tail -f /var/log/*.log
