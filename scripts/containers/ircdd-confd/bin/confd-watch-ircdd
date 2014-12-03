@@ -6,6 +6,7 @@ export NSQD_PORT=${NSQD_PORT:-4150}
 export HOST_IP=${HOST_IP:-172.17.42.1}
 export INSTANCE_NAME=${INSTANCE_NAME:-}
 export ETCD=$HOST_IP:$ETCD_PORT
+export PYTHONPATH=$PYTHONPATH:/data/ircdd
 
 echo "[ircdd] booting container. ETCD: $ETCD"
 
