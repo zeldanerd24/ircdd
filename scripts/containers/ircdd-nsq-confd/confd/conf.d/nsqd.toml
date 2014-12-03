@@ -7,4 +7,4 @@ keys = [
     "/services/nsqlookupd" ,
 ]
 
-reload_cmd="pkill nsqd && nsqd -config=/etc/nsq/nsqd.toml &> /var/log/nsqd.log &"
+reload_cmd="pkill nsqd && nsqd -broadcast-address=$HOST_IP -config=/etc/nsq/nsqd.toml &> /var/log/nsqd.log &"
