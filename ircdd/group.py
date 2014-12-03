@@ -74,7 +74,7 @@ class ShardedGroup(object):
 
         for change in changeset:
             reactor.callFromThread(updateUserList,
-                                   change["new_val"]["users"])
+                                   change["users"])
 
     def _observeMeta(self):
         """
