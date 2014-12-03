@@ -6,7 +6,7 @@ export HOST_IP=${HOST_IP:-172.17.42.1}
 export ETCD=$HOST_IP:$ETCD_PORT
 export LOCAL_NODE=${LOCAL_NODE:-172.17.42.1}
 
-curl -L $LOCAL_NODE/v2/keys/services/rethinkdb -XPUT -d -dir=true
+curl -L $ETCD/v2/keys/services/rethinkdb -XPUT -d -dir=true
 
 # This hack is necessary since the getenv function is not in confd 0.6.3 (latest stable)
 cp /etc/confd/templates/rethinkdb.tmpl /etc/confd/templates/rethinkdb.tmpl.base
