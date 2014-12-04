@@ -4,8 +4,6 @@ RUN wget https://github.com/kelseyhightower/confd/releases/download/v0.6.3/confd
     mv confd-0.6.3-linux-amd64 /usr/local/bin/confd && \
     chmod +x /usr/local/bin/confd
 
-RUN rethinkdb create --directory /var/rethinkdb_data
-
 ADD confd /etc/confd
 ADD bin/confd-watch-rethinkdb /usr/local/bin/confd-watch-rethinkdb
 

@@ -19,6 +19,11 @@ until confd -onetime -node $ETCD -config-file /etc/confd/conf.d/rethinkdb.toml; 
     sleep 5
 done
 
+if [ ! -d "/data/rethinkdb_data" ]; then
+    echo "[rdb] creating rdb data dir"
+    rethinkdb create -d /data/rethinkdb_data
+fi
+
 echo "[rdb] starting rdb..."
 rethinkdb serve --config-file /etc/rethinkdb/rethinkdb.conf --canonical-address $HOST_IP
 
