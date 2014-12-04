@@ -5,7 +5,11 @@ export ETCD_PORT=${ETCD_PORT:-4001}
 export HOST_IP=${HOST_IP:-172.17.42.1}
 export ETCD=$HOST_IP:$ETCD_PORT
 
-curl -L $ETCD/v2/keys/services/rethinkdb -XPUT -d -dir=true
+# Register the current node before it starts so that confd can bootstrap itself.
+get_reg_str() {
+    printf '{"host": "%s", "cluster": "%s", "client": "%s", "http": "%s"}' "${HOST_IP}" "29015" "28015" "8080"
+}
+curl -L $ETCD/v2/keys/services/rethinkdb/$HOST_IP -XPUT -d ttl=30 -d value="`get_reg_str`"
 
 # This hack is necessary since the getenv function is not in confd 0.6.3 (latest stable)
 cp /etc/confd/templates/rethinkdb.tmpl /etc/confd/templates/rethinkdb.tmpl.base
