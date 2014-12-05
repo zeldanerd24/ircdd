@@ -6,6 +6,7 @@ RUN wget https://github.com/kelseyhightower/confd/releases/download/v0.6.3/confd
 
 ADD confd /etc/confd
 ADD bin/confd-watch-rethinkdb /usr/local/bin/confd-watch-rethinkdb
+ADD rethinkdb_base /etc/rethinkdb_base
 
 WORKDIR /data
 
