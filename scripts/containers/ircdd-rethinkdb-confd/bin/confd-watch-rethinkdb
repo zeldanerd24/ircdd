@@ -26,9 +26,15 @@ done
 if [ ! -d "/data/rethinkdb_data" ]; then
     echo "[rdb] creating rdb data dir"
     rethinkdb create -d /data/rethinkdb_data
-fi
 
-echo "[rdb] starting rdb..."
-rethinkdb serve --config-file /etc/rethinkdb/rethinkdb.conf --canonical-address $HOST_IP
+    echo "[rdb] starting rdb..."
+    rethinkdb serve --config-file /etc/rethinkdb/rethinkdb.conf --canonical-address $HOST_IP --daemon
+
+    echo "[rdb] importing base data..."
+    rethinkdb import -d /etc/rethinkdb_base -c $HOST_IP:28015
+else
+    echo "[rdb] starting rdb..."
+    rethinkdb serve --config-file /etc/rethinkdb/rethinkdb.conf --canonical-address $HOST_IP --daemon
+fi
 
 tail -f /var/log/*.log
